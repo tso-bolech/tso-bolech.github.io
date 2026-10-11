@@ -615,7 +615,7 @@ function formatProgramHtml(pData) {
 }
 
 // =====================================================
-// VYKRESLENÍ AKCÍ
+// VYKRESLENÍ AKCÍ (CHYTRÉ ŘAZENÍ: BUDOUCÍ VS. HISTORIE)
 // =====================================================
 function renderEvents() {
   zavritOtocenouKartu();
@@ -643,31 +643,37 @@ function renderEvents() {
 
   const vsechnyViditelne = (appData.akce || []).filter(a => isEventVisibleForUser(a));
 
+  // Nastavení hranice na dnešní půlnoc (akce z dneška zůstává aktivní celý den)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayTs = today.getTime();
 
-  // 1. Aktivní textová oznámení (vždy nahoře)
+  // 1. Aktivní textová oznámení / informace (vždy nahoře v záložce Akce)
   const aktivniOznameni = vsechnyViditelne
     .filter(a => (a.typ === 'Oznámení' || a.typ === 'Informace'))
     .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
 
-  // 2. Hudební akce
+  // 2. Hudební akce (zkoušky, koncerty, generálky)
   const hudebniAkce = vsechnyViditelne.filter(a => !a.typ.includes('Oznámení') && !a.typ.includes('Informace'));
 
+  // Nadcházející akce (dnes a v budoucnu) -> ŘAZENÍ VZESTUPNĚ (nejbližší první!)
   const nadchazejiciAkce = hudebniAkce
     .filter(a => parseDate(a.datum) >= todayTs)
     .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
 
+  // Proběhlé hudební akce
   const probehleAkce = hudebniAkce
-    .filter(a => parseDate(a.datum) < todayTs)
-    .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
+    .filter(a => parseDate(a.datum) < todayTs);
 
+  // Archivovaná textová oznámení / informace v historii
   const archivOznameni = vsechnyViditelne
-    .filter(a => a.typ === 'Oznámení (Archiv)' || a.typ === 'Informace (Infoarchiv)' || a.typ === 'Informace (Historie)')
+    .filter(a => a.typ === 'Oznámení (Archiv)' || a.typ === 'Informace (Infoarchiv)' || a.typ === 'Informace (Historie)');
+
+  // SPOLEČNÁ HISTORIE: sjednocení proběhlých akcí i informací a seřazení od NEJNOVĚJŠÍCH k NEJSTARŠÍM
+  const historieVse = [...probehleAkce, ...archivOznameni]
     .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
 
-  // Záložka „Akce“
+  // --- VYKRESLENÍ ZÁLOŽKY „AKCE“ ---
   aktivniOznameni.forEach(a => cont.innerHTML += generateOznameniHtml(a, canEdit));
   
   if (nadchazejiciAkce.length === 0 && aktivniOznameni.length === 0) {
@@ -676,12 +682,18 @@ function renderEvents() {
     nadchazejiciAkce.forEach(a => cont.innerHTML += generateAkceHtml(a, canEdit));
   }
 
-  // Záložka „Historie“
-  if (probehleAkce.length === 0 && archivOznameni.length === 0) {
+  // --- VYKRESLENÍ ZÁLOŽKY „HISTORIE“ (jednotně podle data sestupně) ---
+  if (historieVse.length === 0) {
     archCont.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">Historie je prázdná.</div>`;
   } else {
-    probehleAkce.forEach(a => archCont.innerHTML += generateAkceHtml(a, canEdit));
-    archivOznameni.forEach(a => archCont.innerHTML += generateOznameniHtml(a, canEdit, true));
+    historieVse.forEach(item => {
+      const jeInfo = item.typ.includes('Informace') || item.typ.includes('Oznámení');
+      if (jeInfo) {
+        archCont.innerHTML += generateOznameniHtml(item, canEdit, true);
+      } else {
+        archCont.innerHTML += generateAkceHtml(item, canEdit);
+      }
+    });
   }
 }
 
