@@ -334,7 +334,6 @@ function formatRichText(raw) {
       result += `<div class="list-item"><span class="list-bullet">•</span><span class="list-content">${itemContent}</span></div>`;
     } else {
       result += lines[i];
-      // Záměrně nepřidáváme <br> navíc na konce řádků
     }
   }
 
@@ -824,13 +823,22 @@ function generateOznameniHtml(akce, canEdit, isArchiv = false) {
 
 function generateRosterHtml(akceId) {
   const potvrdili = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId) && u.stav === 'Ano');
+  const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
+  const explicitniDirigent = (akce && akce.dirigent) ? akce.dirigent.trim() : null;
   
   let dirigentJmeno = null;
   const grouped = {};
 
   potvrdili.forEach(p => {
     const clenInfo = (appData.clenove || []).find(c => c.celeJmeno === p.jmeno || c.jmeno === p.jmeno);
-    const jeDirigent = isDirigentPerson(p.jmeno, p.sekce, clenInfo?.role);
+    
+    let jeDirigent = false;
+    // Pokud je dirigent ručně vypsán, řídí se to striktně podle něj. Jinak platí výchozí logika.
+    if (explicitniDirigent) {
+      jeDirigent = (p.jmeno === explicitniDirigent);
+    } else {
+      jeDirigent = isDirigentPerson(p.jmeno, p.sekce, clenInfo?.role);
+    }
 
     if (jeDirigent) {
       dirigentJmeno = p.jmeno;
@@ -940,10 +948,19 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   let celkemHraje = 0;
   let dirigentPrihlasen = null;
 
+  const explicitniDirigent = (akce && akce.dirigent) ? akce.dirigent.trim() : null;
   ucastAkce.forEach(u => {
     if (u.stav === "Ano") {
       const clen = (appData.clenove || []).find(c => c.celeJmeno === u.jmeno || c.jmeno === u.jmeno);
-      if (isDirigentPerson(u.jmeno, u.sekce, clen?.role)) {
+      
+      let isDir = false;
+      if (explicitniDirigent) {
+        isDir = (u.jmeno === explicitniDirigent);
+      } else {
+        isDir = isDirigentPerson(u.jmeno, u.sekce, clen?.role);
+      }
+
+      if (isDir) {
         dirigentPrihlasen = u.jmeno;
       }
     }
@@ -971,7 +988,14 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     }
 
     let eligiblePlayers = (appData.clenove || []).filter(c => {
-      if (isDirigentPerson(c.celeJmeno, c.sekce, c.role)) return false;
+      let isDir = false;
+      if (explicitniDirigent) {
+        isDir = (c.celeJmeno === explicitniDirigent);
+      } else {
+        isDir = isDirigentPerson(c.celeJmeno, c.sekce, c.role);
+      }
+      if (isDir) return false; // Dirigent se do sekcí nepočítá
+      
       return c.sekce === sec && isMemberEligibleForAkce(c, datumAkce);
     });
 
@@ -1620,6 +1644,18 @@ function openAkceForm(param = null, isReadOnly = false) {
             </small>
           </div>
 
+          <!-- NAŠEPTÁVAČ PRO DIRIGENTY -->
+          <datalist id="dirigenti-list">
+            <option value="Jiří Sycha"></option>
+            <option value="Vojtěch Čapek"></option>
+          </datalist>
+
+          <div id="row_dirigent" style="display:none; margin-bottom: 12px;">
+            <label>Dirigent akce (volitelné):</label>
+            <input type="text" id="f_dirigent" list="dirigenti-list" class="modal-input" placeholder="např. Jiří Sycha, Vojtěch Čapek nebo host..." value="${escapeHtml(akce?.dirigent||'')}" ${roAttr}>
+            <small style="color:var(--text-muted); font-size:12px;">Pokud zadáte jméno (např. hosta), bude po přihlášení na pódium automaticky zařazen na pozici dirigenta.</small>
+          </div>
+          
           <label>Název / Nadpis položky:</label>
           <input type="text" id="f_nazev" value="${escapeHtml(akce?.nazev||'')}" required class="modal-input" ${roAttr}>
 
@@ -1721,7 +1757,7 @@ function moveProgramRow(btn, direction) {
   if (direction === -1 && row.previousElementSibling) {
     row.parentElement.insertBefore(row, row.previousElementSibling);
   } else if (direction === 1 && row.nextElementSibling) {
-    row.parentElement.insertBefore(row.nextElementSibling, row);
+    row.parentElement.insertBefore(row, row.nextElementSibling, row);
   }
   renumberProgramRows();
 }
@@ -1817,6 +1853,10 @@ function toggleAkceFields() {
   const rowCil = document.getElementById('row_cilovaSkupina');
   if (rowCil) rowCil.style.display = jeOznameni ? 'block' : 'none';
 
+  // Zobrazení pole pro dirigenta (skryté u informací)
+  const rowDirigent = document.getElementById('row_dirigent');
+  if (rowDirigent) rowDirigent.style.display = jeOznameni ? 'none' : 'block';
+
   document.getElementById('row_misto').style.display = jeOznameni ? 'none' : 'block';
   document.getElementById('col_casOd').style.display = jeOznameni ? 'none' : 'block';
   document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni) ? 'none' : 'flex';
@@ -1877,6 +1917,7 @@ function submitAkceForm(e, akceId) {
     id: finalId, 
     typ: typ, 
     cilovaSkupina: finalCilovaSkupina,
+    dirigent: jeOznameni ? "" : (document.getElementById('f_dirigent')?.value || "").trim(),
     nazev: document.getElementById('f_nazev').value, 
     datum: formatDateForSave(document.getElementById('f_datum').value), 
     misto: jeOznameni ? "" : document.getElementById('f_misto').value,
