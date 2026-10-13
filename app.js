@@ -2896,3 +2896,63 @@ function ulozitZmenyNot(e) {
   });
 }
 
+// =========================================================================
+// AUTOMATICKÁ TICHÁ AKTUALIZACE DAT (PŘI OTEVŘENÉ APLIKACI)
+// =========================================================================
+let posledniAktualizaceCas = Date.now();
+const MIN_INTERVAL_OBNOVENI_MS = 5 * 60 * 1000; // Minimálně 5 minut mezi kontrolami
+
+async function tichaObnovaDat(vynutit = false) {
+  // Pokud uživatel ještě není přihlášen, neaktualizujeme
+  if (!user) return;
+
+  const nyni = Date.now();
+  if (!vynutit && (nyni - posledniAktualizaceCas < MIN_INTERVAL_OBNOVENI_MS)) {
+    return;
+  }
+
+  // Ochrana: Pokud má někdo zrovna otevřený formulář akce nebo obsazení, nepřekreslujeme
+  if (document.getElementById('akceModal') || document.getElementById('orchestrModal')) {
+    return;
+  }
+
+  try {
+    const freshData = await runGoogleScript("getInitialData");
+    if (freshData && freshData.akce) {
+      appData = freshData;
+      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+      posledniAktualizaceCas = Date.now();
+
+      renderEvents();
+      
+      const jeDirigentAktivni = isUserConductor(user);
+      const efektivniNastroj = (user.section && user.section.toLowerCase() === 'dirigent') ? 'Partitura' : user.section;
+      vykresliNoty(appData.noty || [], efektivniNastroj, jeDirigentAktivni);
+      
+      if (hasEditRights(user.role)) {
+        vykresliAdminNoty();
+      }
+    }
+  } catch (err) {
+    console.warn("Tichá aktualizace dat selhala:", err);
+  }
+}
+
+// 1. Spuštění při návratu do aplikace (odemknutí telefonu, přepnutí záložky zpět)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    tichaObnovaDat();
+  }
+});
+
+// 2. Spuštění při kliknutí/zaostření do okna (v prohlížeči na PC či notebooku)
+window.addEventListener("focus", () => {
+  tichaObnovaDat();
+});
+
+// 3. Pravidelná kontrola na pozadí pro ty, kdo mají aplikaci trvale na displeji (každých 10 minut)
+setInterval(() => {
+  if (document.visibilityState === "visible") {
+    tichaObnovaDat(true);
+  }
+}, 10 * 60 * 1000);
