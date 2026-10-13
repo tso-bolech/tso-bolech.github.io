@@ -2335,30 +2335,105 @@ function confirmLogout() {
 }
 
 // =========================================================================
-// NOTOVÝ ARCHIV PRO HRÁČE
+// ZJIŠTĚNÍ OPRÁVNĚNÍ A PROGRAMŮ PRO DIRIGENTA
+// =========================================================================
+function isUserConductor(u = user) {
+  if (!u) return false;
+  if (isDirigentPerson(u.name, u.section, u.role)) return true;
+  const uName = String(u.name || "").trim().toLowerCase();
+  const uSec = String(u.section || "").trim().toLowerCase();
+  if (uSec === "dirigent" || uSec.includes("dirigent")) return true;
+  return (appData.akce || []).some(a => String(a.dirigent || "").trim().toLowerCase() === uName);
+}
+
+function getDirigentProgramy(u = user) {
+  if (!u) return [];
+  const uName = String(u.name || "").trim().toLowerCase();
+  const uRole = String(u.role || "").trim().toLowerCase();
+  const uSec = String(u.section || "").trim().toLowerCase();
+
+  const vsechnyProgramy = Array.from(new Set(
+    (appData.noty || []).map(n => String(n.program || "").trim()).filter(Boolean)
+  ));
+
+  // Šéfdirigent a vedení mají přístup ke všem programům
+  const jeSef = uRole.includes('dirigent') || uName.includes('sycha') || hasEditRights(uRole);
+  if (jeSef) return vsechnyProgramy;
+
+  // Akce, které tento uživatel diriguje
+  const dirigovaneAkce = (appData.akce || []).filter(a => {
+    const aDir = String(a.dirigent || "").trim().toLowerCase();
+    if (aDir && aDir === uName) return true;
+    if (!aDir && (uSec === 'dirigent' || uSec.includes('dirigent'))) return true;
+    return false;
+  });
+
+  if (dirigovaneAkce.length === 0) {
+    return (uSec === 'dirigent' || uSec.includes('dirigent')) ? vsechnyProgramy : [];
+  }
+
+  const nalezene = new Set();
+  dirigovaneAkce.forEach(a => {
+    const aNazev = String(a.nazev || "").trim().toLowerCase();
+    const aPozn = String(a.poznamka || "").trim().toLowerCase();
+
+    vsechnyProgramy.forEach(prog => {
+      const pLow = prog.toLowerCase();
+      if (aNazev.includes(pLow) || pLow.includes(aNazev) || aPozn.includes(pLow)) {
+        nalezene.add(prog);
+      }
+    });
+  });
+
+  return nalezene.size > 0 ? Array.from(nalezene) : vsechnyProgramy;
+}
+
+// =========================================================================
+// NOTOVÝ ARCHIV PRO HRÁČE A DIRIGENTY
 // =========================================================================
 function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
   const kontejner = document.getElementById('notyContainer');
   const infoText = document.getElementById('notyNastrojInfo');
-  
   if (!kontejner) return;
 
   const canEdit = hasEditRights(user.role);
-  const efektivniNastroj = (nastrojUzivatele === "Baskytara") ? "Kontrabasy" : nastrojUzivatele;
+  const jeDirigentAktivni = isUserConductor(user);
+  const povolenoPrepinat = canEdit || jeDirigentAktivni;
+  const jeExterniHostDirigent = (String(user.role || "").trim().toLowerCase() === "host") && 
+                                (String(user.section || "").trim().toLowerCase() === "dirigent");
+
+  // Vyhodnocení efektivního nástroje / partitury
+  let efektivniNastroj = nastrojUzivatele;
+  if (efektivniNastroj === "Baskytara") efektivniNastroj = "Kontrabasy";
+  if (efektivniNastroj === "Dirigent") efektivniNastroj = "Partitura";
+
+  const jeRezimPartitury = efektivniNastroj === "Partitura";
 
   if (infoText) {
-    infoText.textContent = jeDirigent ? "Režim partitury" : `Zobrazený part: ${efektivniNastroj}${nastrojUzivatele === 'Baskytara' ? ' (převzato z kontrabasů)' : ''}`;
+    infoText.textContent = jeRezimPartitury 
+      ? "Režim partitury (Dirigent)" 
+      : `Zobrazený part: ${efektivniNastroj}${user.section === 'Baskytara' ? ' (převzato z kontrabasů)' : ''}`;
   }
 
+  // Seznam povolených programů pro partituru / externího hosta
+  const dirigovaneProgramy = jeDirigentAktivni ? getDirigentProgramy(user) : [];
+
   let htmlDropdown = '';
-  if (canEdit) {
+  if (povolenoPrepinat) {
+    const labelDropdownu = jeDirigentAktivni ? "🎼 Výběr partu / partitury pro kontrolu:" : "👀 Náhled partů (pouze pro vedení):";
     htmlDropdown = `
       <div style="margin-bottom: 20px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-        <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 8px; color: var(--text);">👀 Náhled partů (pouze pro vedení):</label>
+        <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 8px; color: var(--text);">${labelDropdownu}</label>
         <select class="modal-input" onchange="zmenitPohledNot(this.value)" style="margin-bottom:0; font-size:14px; background: var(--surface);">
-          <option value="Vlastní part" ${efektivniNastroj === user.section ? 'selected' : ''}>Můj nástroj / Výchozí pohled (${user.section})</option>
-          ${PARTITURA_SECTIONS.map(s => `<option value="${s}" ${efektivniNastroj === s && efektivniNastroj !== user.section ? 'selected' : ''}>${s}</option>`).join('')}
+          ${user.section && user.section.toLowerCase() !== 'dirigent' ? `<option value="Vlastní part" ${efektivniNastroj === user.section ? 'selected' : ''}>Můj nástroj (${user.section})</option>` : ''}
+          ${jeDirigentAktivni ? `<option value="Partitura" ${efektivniNastroj === 'Partitura' ? 'selected' : ''}>🎼 Partitura (celý orchestr)</option>` : ''}
+          ${PARTITURA_SECTIONS.map(s => `<option value="${s}" ${efektivniNastroj === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
+        ${(jeRezimPartitury && dirigovaneProgramy.length > 0 && !hasEditRights(user.role)) ? `
+          <small style="color:var(--text-muted); font-size:12px; display:block; margin-top:6px;">
+            Zobrazeny partitury pro dirigovaný program: <strong>${dirigovaneProgramy.join(', ')}</strong>
+          </small>
+        ` : ''}
       </div>
     `;
   }
@@ -2366,7 +2441,25 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
   const relevantniNoty = dataNoty.filter(nota => {
     let aktivni = String(nota.aktivni || '').toUpperCase().trim();
     if (aktivni !== 'TRUE' && aktivni !== 'ANO' && aktivni !== '1') return false;
-    if (jeDirigent && nota.sekce === 'Partitura') return true;
+
+    // PRAVIDLO PRO PROGRAMY:
+    // 1. Pokud je to externí hostující dirigent (role Host bez nástroje), vidí jen svůj program.
+    // 2. Pokud kdokoliv (i hráč-dirigent) prohlíží PARTITURU, vidí partitury programů, které diriguje (šéfdirigent vidí vše).
+    // 3. Pokud stálý hráč (např. Vojtěch Čapek) prohlíží SVŮJ NÁSTROJ (housle) nebo jiné hráčské party,
+    //    vidí VŠECHNY AKTUÁLNÍ PROGRAMY na repertoáru!
+    if (!hasEditRights(user.role)) {
+      if (jeExterniHostDirigent) {
+        if (dirigovaneProgramy.length > 0 && !dirigovaneProgramy.includes(String(nota.program || '').trim())) {
+          return false;
+        }
+      } else if (jeRezimPartitury && jeDirigentAktivni && dirigovaneProgramy.length > 0) {
+        if (!dirigovaneProgramy.includes(String(nota.program || '').trim())) {
+          return false;
+        }
+      }
+    }
+
+    if (efektivniNastroj === 'Partitura') return nota.sekce === 'Partitura';
     if (nota.sekce === efektivniNastroj) return true;
     
     if (nota.sekce === 'Housle' && (efektivniNastroj === '1. Housle' || efektivniNastroj === '2. Housle')) return true;
@@ -2380,7 +2473,7 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
   let html = htmlDropdown;
 
   if (relevantniNoty.length === 0) {
-    kontejner.innerHTML = html + '<p style="color: var(--text-muted); text-align: center; margin-top: 40px; padding: 20px;">Pro tento part aktuálně nejsou k dispozici žádné noty na repertoáru.</p>';
+    kontejner.innerHTML = html + '<p style="color: var(--text-muted); text-align: center; margin-top: 40px; padding: 20px;">Pro tento part v daném programu nejsou k dispozici žádné noty.</p>';
     return;
   }
 
@@ -2437,6 +2530,17 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
   }
   
   kontejner.innerHTML = html;
+}
+
+function zmenitPohledNot(novyNastroj) {
+  const jeDirigentAktivni = isUserConductor(user);
+  let nastrojProZobrazeni = novyNastroj;
+  
+  if (novyNastroj === 'Vlastní part') {
+    nastrojProZobrazeni = (user.section.toLowerCase() === 'dirigent') ? 'Partitura' : user.section;
+  }
+  
+  vykresliNoty(appData.noty || [], nastrojProZobrazeni, jeDirigentAktivni);
 }
 
 window.maNeulozeneZmeny = false;
@@ -2780,9 +2884,3 @@ function ulozitZmenyNot(e) {
   });
 }
 
-function zmenitPohledNot(novyNastroj) {
-  const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
-  const nastrojProZobrazeni = (novyNastroj === 'Vlastní part') ? user.section : novyNastroj;
-  const simulujDirigenta = (novyNastroj === 'Vlastní part' && jeDirigent);
-  vykresliNoty(appData.noty || [], nastrojProZobrazeni, simulujDirigenta);
-}
