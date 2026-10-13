@@ -737,8 +737,10 @@ function generateAkceHtml(akce, canEdit) {
             </div>
 
             <div class="${hasProgram ? 'card-clickable-area' : ''}" ${hasProgram ? `onclick="flipCard('${cardFlipperId}')"` : ''}>
+              <p style="margin-bottom:6px;">🎼 Dirigent: <strong>${escapeHtml(akce.dirigent || "Jiří Sycha")}</strong></p>
               ${akce.misto ? `<p style="margin-bottom:6px;">📍 ${escapeHtml(akce.misto)}</p>` : ''}
               <p style="margin-bottom:6px;">🕒 Začátek: <strong>${escapeHtml(akce.casOd)}</strong></p>
+              ${akce.casDo ? `<p style="margin-bottom:6px;">⌛ Konec: <strong>${escapeHtml(akce.casDo)}</strong></p>` : ''}
               ${akce.casSrazu ? `<p style="margin-bottom:6px;">⏰ Sraz: <strong>${escapeHtml(akce.casSrazu)}</strong></p>` : ''}
               ${akce.zacatekGeneralky ? `<p style="margin-bottom:6px;">🎻 Generálka: <strong>${escapeHtml(akce.zacatekGeneralky)}</strong></p>` : ''}
               ${akce.damy ? `<p style="margin-bottom:6px;">👗 Dámy: ${escapeHtml(akce.damy)}</p>` : ''}
@@ -1670,6 +1672,11 @@ function openAkceForm(param = null, isReadOnly = false) {
             </div>
           </div>
 
+          <div id="row_casDo" style="display:none; margin-bottom:12px;">
+            <label>Konec zkoušky (čas do – volitelné):</label>
+            <input type="time" id="f_casDo" value="${escapeHtml(akce?.casDo||'')}" class="modal-input" ${roAttr}>
+          </div>
+
           <div id="row_misto" style="display:block;">
             <label>Místo:</label>
             <input type="text" id="f_misto" value="${escapeHtml(akce?.misto||'')}" class="modal-input" ${roAttr}>
@@ -1857,6 +1864,10 @@ function toggleAkceFields() {
   const rowDirigent = document.getElementById('row_dirigent');
   if (rowDirigent) rowDirigent.style.display = jeOznameni ? 'none' : 'block';
 
+  // Zobrazení pole pro konec zkoušky (pouze u zkoušek)
+  const rowCasDo = document.getElementById('row_casDo');
+  if (rowCasDo) rowCasDo.style.display = jeZkouska ? 'block' : 'none';
+
   document.getElementById('row_misto').style.display = jeOznameni ? 'none' : 'block';
   document.getElementById('col_casOd').style.display = jeOznameni ? 'none' : 'block';
   document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni) ? 'none' : 'flex';
@@ -1922,6 +1933,7 @@ function submitAkceForm(e, akceId) {
     datum: formatDateForSave(document.getElementById('f_datum').value), 
     misto: jeOznameni ? "" : document.getElementById('f_misto').value,
     casOd: jeOznameni ? "" : document.getElementById('f_casOd').value,
+    casDo: (jeOznameni || !jeZkouska) ? "" : (document.getElementById('f_casDo')?.value || ""),
     casSrazu: (jeZkouska || jeOznameni) ? "" : document.getElementById('f_casSrazu').value,
     zacatekGeneralky: typ !== 'Koncert' ? "" : document.getElementById('f_zacatekGeneralky').value,
     damy: typ !== 'Koncert' ? "" : document.getElementById('f_damy').value, 
