@@ -161,6 +161,62 @@ function updateThemeIcon(isDark) {
 }
 initTheme(); 
 
+// =====================================================
+// PŘEPÍNAČ ZOBRAZENÍ: MOBILNÍ VS. PC (POUZE PRO ADMINA)
+// =====================================================
+function isAdminUser(u = user) {
+  if (!u || !u.role) return false;
+  return String(u.role).trim().toLowerCase().includes('admin');
+}
+
+function initLayoutMode() {
+  const btn = document.getElementById('layoutToggleBtn');
+  if (!isAdminUser()) {
+    document.body.classList.remove('desktop-mode');
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+
+  // Admin má tlačítko viditelné
+  if (btn) btn.style.display = 'inline-flex';
+
+  const savedMode = localStorage.getItem('bolech_layout_mode');
+  if (savedMode === 'desktop') {
+    document.body.classList.add('desktop-mode');
+    updateLayoutIcon(true);
+  } else if (savedMode === 'mobile') {
+    document.body.classList.remove('desktop-mode');
+    updateLayoutIcon(false);
+  } else {
+    // Automatická detekce při prvním spuštění na PC (myš + široké okno)
+    const isPC = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches;
+    if (isPC) {
+      document.body.classList.add('desktop-mode');
+      updateLayoutIcon(true);
+    } else {
+      document.body.classList.remove('desktop-mode');
+      updateLayoutIcon(false);
+    }
+  }
+}
+
+function toggleLayoutMode() {
+  if (!isAdminUser()) return;
+  const isDesktop = document.body.classList.toggle('desktop-mode');
+  localStorage.setItem('bolech_layout_mode', isDesktop ? 'desktop' : 'mobile');
+  updateLayoutIcon(isDesktop);
+}
+
+function updateLayoutIcon(isDesktop) {
+  const icon = document.getElementById('layout-icon');
+  const btn = document.getElementById('layoutToggleBtn');
+  if (!icon) return;
+  icon.innerText = isDesktop ? '📱' : '🖥️';
+  if (btn) {
+    btn.title = isDesktop ? 'Přepnout na mobilní zobrazení (Admin)' : 'Přepnout na PC zobrazení (Admin)';
+  }
+}
+
 async function runGoogleScript(action, payload = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -267,6 +323,7 @@ function handleLoginSubmit(e) {
 function initApp() {
   document.getElementById("mainApp").style.display = "block";
   document.getElementById("userBadge").innerText = user.name;
+  initLayoutMode();
   
   const canEdit = hasEditRights(user.role);
   const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
