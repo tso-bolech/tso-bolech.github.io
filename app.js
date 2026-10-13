@@ -86,7 +86,7 @@ function isCommitteeMember(role) {
 // GLOBÁLNÍ NASTAVENÍ PÍSMA A TÉMATU
 // =====================================================
 const FONT_LEVELS = [
-  { id: 'small',  scale: 0.88, title: 'Malé',       sample: 'Kompaktní zobrazení' },
+  { id: 'small',  scale: 0.88, title: 'Malé',        sample: 'Kompaktní zobrazení' },
   { id: 'normal', scale: 1.0,  title: 'Výchozí',     sample: 'Standardní čitelnost' },
   { id: 'large',  scale: 1.15, title: 'Větší',       sample: 'Pohodlné čtení' },
   { id: 'xlarge', scale: 1.3,  title: 'Extra velké', sample: 'Maximální čitelnost' }
@@ -334,9 +334,7 @@ function formatRichText(raw) {
       result += `<div class="list-item"><span class="list-bullet">•</span><span class="list-content">${itemContent}</span></div>`;
     } else {
       result += lines[i];
-      if (i < lines.length - 1) {
-        result += '<br>';
-      }
+      // Záměrně nepřidáváme <br> navíc na konce řádků
     }
   }
 
@@ -699,6 +697,9 @@ function renderEvents() {
 
 function generateAkceHtml(akce, canEdit) {
   const myVote = (appData.ucast||[]).find(u => String(u.akceId) === String(akce.id) && u.jmeno === user.name);
+  const jePotvrzenoAno = myVote && myVote.stav === 'Ano';
+  const jePotvrzenoNe = myVote && myVote.stav === 'Ne';
+
   let barClass = 'bar-tutti';
   if(akce.typ === 'Koncert') barClass = 'bar-koncert';
   else if(akce.typ === 'Generálka') barClass = 'bar-generalka';
@@ -750,10 +751,10 @@ function generateAkceHtml(akce, canEdit) {
 
           <div class="card-body" style="padding-top: 16px;">
             <div class="att-buttons">
-              <button class="btn-att ${myVote?.stav==='Ano'?'selected-ano':''}" onclick="submitUcast('${akce.id}','${akce.datum}','Ano',this)">✓ Účastním se</button>
-              <button class="btn-att ${myVote?.stav==='Ne'?'selected-ne':''}" onclick="submitUcast('${akce.id}','${akce.datum}','Ne',this)">✕ Neúčastním</button>
+              <button class="btn-att ${jePotvrzenoAno ? 'selected-ano' : ''}" onclick="submitUcast('${akce.id}','${akce.datum}','Ano',this)">✓ Účastním se</button>
+              <button class="btn-att ${jePotvrzenoNe ? 'selected-ne' : ''}" onclick="submitUcast('${akce.id}','${akce.datum}','Ne',this)">✕ Neúčastním</button>
             </div>
-            <div id="duvod-${akce.id}" class="duvod-box" style="display:${myVote?.stav==='Ne'&&!myVote?.duvod?'block':'none'}">
+            <div id="duvod-${akce.id}" class="duvod-box" style="display:${jePotvrzenoNe && (!myVote || !myVote.duvod) ? 'block' : 'none'}">
               <input type="text" id="in-${akce.id}" placeholder="Důvod neúčasti" class="modal-input" style="margin-bottom:12px;">
               <button class="btn" onclick="saveDuvod('${akce.id}','${akce.datum}',this)">Odeslat důvod</button>
             </div>
@@ -2636,7 +2637,7 @@ function vykresliAdminNoty() {
                          const det = this.closest('details');
                          if(this.checked) { det.classList.remove('folder-inactive'); det.classList.add('folder-active'); }
                          else { det.classList.add('folder-inactive'); det.classList.remove('folder-active'); }
-                       ">
+                        ">
               </label>
 
             </div>
