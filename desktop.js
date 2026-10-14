@@ -1,7 +1,8 @@
 /**
- * TSO Bolech - Desktop / PC Mode Engine (desktop.js)
- * Samostatný modul pro správu PC režimu a zednického (masonry) rozvržení karet.
- * Aktivuje se pouze pro roli Admin a nezasahuje do mobilní verze.
+ * TSO Bolech - Automatický Desktop / PC Engine (desktop.js)
+ * Aktivuje se automaticky pro všechny uživatele podle šířky obrazovky:
+ * - PC / notebook (šířka >= 900px): aktivuje desktop-mode a zednické (masonry) rozvržení
+ * - Mobil / menší displej (< 900px): ponechává čistou mobilní verzi
  */
 
 (function () {
@@ -11,22 +12,8 @@
   let mutationObserver = null;
   let masonryDebounceTimer = null;
 
-  // Ověření, zda je přihlášený uživatel Admin
-  function isCurrentUserAdmin() {
-    try {
-      if (typeof user !== 'undefined' && user && user.role) {
-        return String(user.role).trim().toLowerCase().includes('admin');
-      }
-      const saved = localStorage.getItem('bolech_auth_member');
-      if (saved) {
-        const u = JSON.parse(saved);
-        return String(u.role || '').trim().toLowerCase().includes('admin');
-      }
-    } catch (e) {
-      console.warn('desktop.js: Chyba při ověřování role:', e);
-    }
-    return false;
-  }
+  // Media query pro detekci PC / monitoru (od šířky 900px)
+  const desktopMediaQuery = window.matchMedia('(min-width: 900px)');
 
   // Výpočet a nastavení počtu span řádků pro kartu i admin lištu (krok 8px, mezera 20px)
   function updateCardMasonrySpan(item) {
@@ -46,7 +33,7 @@
     item.style.gridRowEnd = `span ${span}`;
   }
 
-  // Přepočet všech položek (admin panel, akce i informace) v Akcích i Historii
+  // Přepočet všech položek v Akcích i Historii
   function refreshDesktopMasonry() {
     if (!document.body.classList.contains('desktop-mode')) return;
 
@@ -66,7 +53,6 @@
 
     containers.forEach(cont => {
       if (!cont) return;
-      // Zahrnujeme i .admin-actions, aby karty neskočily přes ovládací tlačítka
       const items = cont.querySelectorAll('.admin-actions, .card-flip-container, .card-oznameni');
       items.forEach(el => {
         updateCardMasonrySpan(el);
@@ -97,78 +83,44 @@
     });
   }
 
-  // Aktualizace ikony v záhlaví
-  function updateLayoutIcon(isDesktop) {
-    const icon = document.getElementById('layout-icon');
-    const btn = document.getElementById('layoutToggleBtn');
-    if (icon) {
-      icon.innerText = isDesktop ? '📱' : '🖥️';
-    }
-    if (btn) {
-      btn.title = isDesktop ? 'Přepnout na mobilní zobrazení (Admin)' : 'Přepnout na PC zobrazení (Admin)';
-    }
-  }
-
-  // Inicializace režimu při startu aplikace
-  function initDesktopMode() {
-    const btn = document.getElementById('layoutToggleBtn');
-    const isAdmin = isCurrentUserAdmin();
-
-    if (!isAdmin) {
-      document.body.classList.remove('desktop-mode');
-      if (btn) btn.style.display = 'none';
-      return;
-    }
-
-    // Admin má tlačítko viditelné
-    if (btn) btn.style.display = 'inline-flex';
-
-    const savedMode = localStorage.getItem('bolech_layout_mode');
-    if (savedMode === 'desktop') {
-      document.body.classList.add('desktop-mode');
-      updateLayoutIcon(true);
-      setTimeout(refreshDesktopMasonry, 50);
-    } else if (savedMode === 'mobile') {
-      document.body.classList.remove('desktop-mode');
-      updateLayoutIcon(false);
-    } else {
-      // Automatická detekce při prvním spuštění na PC (myš/touchpad + široké okno)
-      const isPC = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches;
-      if (isPC) {
-        document.body.classList.add('desktop-mode');
-        updateLayoutIcon(true);
-        setTimeout(refreshDesktopMasonry, 50);
-      } else {
-        document.body.classList.remove('desktop-mode');
-        updateLayoutIcon(false);
-      }
-    }
-
-    setupDomMutationWatcher();
-  }
-
-  // Přepnutí režimu kliknutím na tlačítko
-  function toggleLayoutMode() {
-    if (!isCurrentUserAdmin()) return;
-    const isDesktop = document.body.classList.toggle('desktop-mode');
-    localStorage.setItem('bolech_layout_mode', isDesktop ? 'desktop' : 'mobile');
-    updateLayoutIcon(isDesktop);
+  // Automatické vyhodnocení velikosti displeje
+  function applyResponsiveLayout() {
+    const isDesktop = desktopMediaQuery.matches;
 
     if (isDesktop) {
-      setTimeout(refreshDesktopMasonry, 50);
+      if (!document.body.classList.contains('desktop-mode')) {
+        document.body.classList.add('desktop-mode');
+      }
+      setTimeout(refreshDesktopMasonry, 40);
     } else {
-      document.querySelectorAll('#eventsContainer [style*="grid-row-end"], #archiveContainer [style*="grid-row-end"]').forEach(el => {
-        el.style.gridRowEnd = '';
-      });
+      if (document.body.classList.contains('desktop-mode')) {
+        document.body.classList.remove('desktop-mode');
+        // Vyčistit zednické styly na mobilu
+        document.querySelectorAll('#eventsContainer [style*="grid-row-end"], #archiveContainer [style*="grid-row-end"]').forEach(el => {
+          el.style.gridRowEnd = '';
+        });
+      }
     }
   }
 
-  // Zpřístupnění do globálního window pro onclick v HTML
-  window.toggleLayoutMode = toggleLayoutMode;
+  // Inicializace při startu
+  function initDesktopMode() {
+    applyResponsiveLayout();
+    setupDomMutationWatcher();
+
+    // Dynamická reakce na otočení zařízení nebo změnu velikosti okna prohlížeče
+    if (desktopMediaQuery.addEventListener) {
+      desktopMediaQuery.addEventListener('change', applyResponsiveLayout);
+    } else if (desktopMediaQuery.addListener) {
+      desktopMediaQuery.addListener(applyResponsiveLayout);
+    }
+  }
+
+  // Zpřístupnění do globálního window pro případné volání
   window.initDesktopMode = initDesktopMode;
   window.refreshDesktopMasonry = refreshDesktopMasonry;
 
-  // Automatické napojení na stávající funkce app.js (bez nutnosti je upravovat)
+  // Automatické napojení na stávající funkce aplikace
   function hookIntoApp() {
     if (typeof window.initApp === 'function') {
       const originalInitApp = window.initApp;
@@ -182,13 +134,13 @@
       const originalRenderEvents = window.renderEvents;
       window.renderEvents = function () {
         originalRenderEvents.apply(this, arguments);
-        if (document.body.classList.contains('desktop-mode')) {
+        if (desktopMediaQuery.matches) {
           setTimeout(refreshDesktopMasonry, 30);
         }
       };
     }
 
-    // Pokud již byl uživatel přihlášen a DOM je připraven
+    // Pokud je DOM již připraven
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       initDesktopMode();
     } else {
