@@ -1,0 +1,172 @@
+/* ==========================================================================
+   DESKTOP / PC REŽIM PRO TSO BOLECH (desktop.css)
+   Aktivuje se přidáním třídy body.desktop-mode (přepínač pro Admina)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. ZÁHLAVÍ (HEADER) PŘES CELOU ŠÍŘKU OBRAZOVKY
+   -------------------------------------------------------------------------- */
+body.desktop-mode .app-header {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-left: 32px !important;
+  padding-right: 32px !important;
+  box-sizing: border-box !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. ODEMKNUTÍ HLAVNÍHO KONTEJNERU PRO VELKÝ MONITOR
+   -------------------------------------------------------------------------- */
+body.desktop-mode,
+body.desktop-mode html,
+body.desktop-mode #mainApp {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Původní .container měl max-width: 640px, v desktop-mode se rozšíří na max. 1440px */
+body.desktop-mode .container {
+  width: 100% !important;
+  max-width: 1440px !important;
+  margin: 0 auto !important;
+  padding: 24px 32px 100px 32px !important;
+  box-sizing: border-box !important;
+}
+
+body.desktop-mode #tab-events,
+body.desktop-mode #tab-archive,
+body.desktop-mode #tab-sheetmusic,
+body.desktop-mode #tab-admin-noty {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. VÍCESLOUFCOVÉ MASONRY ROZVRŽENÍ PRO AKCE A HISTORII
+   -------------------------------------------------------------------------- */
+body.desktop-mode #eventsContainer,
+body.desktop-mode #archiveContainer {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)) !important;
+  grid-auto-rows: 8px !important;
+  grid-auto-flow: dense !important;
+  gap: 20px !important;
+  width: 100% !important;
+  align-items: start !important;
+}
+
+/* Nativní CSS Masonry pro prohlížeče s podporou */
+@supports (grid-template-rows: masonry) {
+  body.desktop-mode #eventsContainer,
+  body.desktop-mode #archiveContainer {
+    grid-template-rows: masonry !important;
+    grid-auto-rows: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. INFORMAČNÍ ZPRÁVY / OZNÁMENÍ (ŠÍŘKA 1 KARTY - PŘIROZENĚ V GRIDU)
+   -------------------------------------------------------------------------- */
+body.desktop-mode #eventsContainer > .card-oznameni,
+body.desktop-mode #archiveContainer > .card-oznameni {
+  grid-column: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* --------------------------------------------------------------------------
+   5. ADMIN LIŠTA TLAČÍTEK (PŘES CELOU ŠÍŘKU NAHOŘE S PEVNOU VÝŠKOU V GRIDU)
+   -------------------------------------------------------------------------- */
+body.desktop-mode #eventsContainer > .admin-actions {
+  grid-column: 1 / -1 !important;
+  grid-row-end: span 4; /* Bezpečná výchozí výška, aby karty nikdy nepřekryly tlačítka */
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 12px !important;
+  background: var(--surface);
+  padding: 12px 18px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  margin-bottom: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body.desktop-mode #eventsContainer > .admin-actions > div {
+  display: flex !important;
+  flex: 2 !important;
+  gap: 8px !important;
+}
+
+body.desktop-mode #eventsContainer > .admin-actions > button {
+  flex: 1.2 !important;
+}
+
+/* --------------------------------------------------------------------------
+   6. PŘIZPŮSOBENÍ 3D KARET UVNITŘ MASONRY GRIDU
+   -------------------------------------------------------------------------- */
+body.desktop-mode #eventsContainer .card-flip-container,
+body.desktop-mode #archiveContainer .card-flip-container,
+body.desktop-mode #eventsContainer .card,
+body.desktop-mode #archiveContainer .card {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  height: auto !important;
+}
+
+body.desktop-mode .card-flipper {
+  height: auto !important;
+}
+
+body.desktop-mode .card-front,
+body.desktop-mode .card-back {
+  height: auto !important;
+  min-height: auto !important;
+  box-sizing: border-box !important;
+}
+
+/* Komfortní rolování docházky na monitoru */
+body.desktop-mode .roster-content {
+  max-height: 380px !important;
+  overflow-y: auto !important;
+}
+
+/* --------------------------------------------------------------------------
+   7. NOTOVÝ ARCHIV A SPRÁVA NOT NA PC
+   -------------------------------------------------------------------------- */
+body.desktop-mode #notyContainer {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+body.desktop-mode #notyContainer > div:first-child,
+body.desktop-mode #notyContainer > .program-header,
+body.desktop-mode #notyContainer > p {
+  grid-column: 1 / -1 !important;
+}
+
+body.desktop-mode #notyContainer .nota-card {
+  margin: 0 !important;
+}
+
+body.desktop-mode #adminNotyContainer .folder-content {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)) !important;
+  gap: 10px !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. MODÁLNÍ OKNA PRO PC
+   -------------------------------------------------------------------------- */
+body.desktop-mode .modal-box {
+  max-width: 720px !important;
+  padding: 24px !important;
+}

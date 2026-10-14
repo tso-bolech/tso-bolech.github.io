@@ -1,10 +1,12 @@
-const CACHE_NAME = 'bolech-dynamic-cache-v14';
+const CACHE_NAME = 'bolech-dynamic-cache-v19';
 
 const STATIC_ASSETS = [
   './',
   './index.html',
   './style.css',
+  './desktop.css'
   './app.js',
+  './desktop.js'
   './manifest.json',
   './icon-512.png',
   './logo-transparent.png'
