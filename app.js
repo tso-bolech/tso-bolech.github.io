@@ -388,6 +388,16 @@ function parseDate(dateStr) {
 function formatDisplayTime(timeStr) {
   if (!timeStr) return "";
   const s = String(timeStr).trim();
+  // Pokud Google Sheets pošle ISO formát s UTC časem (např. 1899-12-30T19:00:00.000Z)
+  if (s.includes('T') && (s.endsWith('Z') || s.includes('+') || s.includes('-'))) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+  }
+  // Běžný textový formát (např. "20:00" nebo "9:30")
   const match = s.match(/(\d{1,2}):(\d{2})/);
   if (match) {
     const hh = match[1].padStart(2, '0');
@@ -398,8 +408,9 @@ function formatDisplayTime(timeStr) {
 }
 
 function parseTimeToMinutes(timeStr) {
-  if (!timeStr) return 0;
-  const match = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  const clean = formatDisplayTime(timeStr);
+  if (!clean) return 0;
+  const match = clean.match(/(\d{1,2}):(\d{2})/);
   if (match) {
     return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
   }
