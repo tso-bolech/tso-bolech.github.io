@@ -161,6 +161,62 @@ function updateThemeIcon(isDark) {
 }
 initTheme(); 
 
+// =====================================================
+// PŘEPÍNAČ ZOBRAZENÍ: MOBILNÍ VS. PC (POUZE PRO ADMINA)
+// =====================================================
+function isAdminUser(u = user) {
+  if (!u || !u.role) return false;
+  return String(u.role).trim().toLowerCase().includes('admin');
+}
+
+function initLayoutMode() {
+  const btn = document.getElementById('layoutToggleBtn');
+  if (!isAdminUser()) {
+    document.body.classList.remove('desktop-mode');
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+
+  // Admin má tlačítko viditelné
+  if (btn) btn.style.display = 'inline-flex';
+
+  const savedMode = localStorage.getItem('bolech_layout_mode');
+  if (savedMode === 'desktop') {
+    document.body.classList.add('desktop-mode');
+    updateLayoutIcon(true);
+  } else if (savedMode === 'mobile') {
+    document.body.classList.remove('desktop-mode');
+    updateLayoutIcon(false);
+  } else {
+    // Automatická detekce při prvním spuštění na PC (myš + široké okno)
+    const isPC = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches;
+    if (isPC) {
+      document.body.classList.add('desktop-mode');
+      updateLayoutIcon(true);
+    } else {
+      document.body.classList.remove('desktop-mode');
+      updateLayoutIcon(false);
+    }
+  }
+}
+
+function toggleLayoutMode() {
+  if (!isAdminUser()) return;
+  const isDesktop = document.body.classList.toggle('desktop-mode');
+  localStorage.setItem('bolech_layout_mode', isDesktop ? 'desktop' : 'mobile');
+  updateLayoutIcon(isDesktop);
+}
+
+function updateLayoutIcon(isDesktop) {
+  const icon = document.getElementById('layout-icon');
+  const btn = document.getElementById('layoutToggleBtn');
+  if (!icon) return;
+  icon.innerText = isDesktop ? '📱' : '🖥️';
+  if (btn) {
+    btn.title = isDesktop ? 'Přepnout na mobilní zobrazení (Admin)' : 'Přepnout na PC zobrazení (Admin)';
+  }
+}
+
 async function runGoogleScript(action, payload = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -267,6 +323,7 @@ function handleLoginSubmit(e) {
 function initApp() {
   document.getElementById("mainApp").style.display = "block";
   document.getElementById("userBadge").innerText = user.name;
+  initLayoutMode();
   
   const canEdit = hasEditRights(user.role);
   const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
@@ -326,6 +383,27 @@ function parseDate(dateStr) {
     return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10)).getTime();
   }
   return new Date(dateStr).getTime() || 0;
+}
+
+function formatDisplayTime(timeStr) {
+  if (!timeStr) return "";
+  const s = String(timeStr).trim();
+  const match = s.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const hh = match[1].padStart(2, '0');
+    const mm = match[2];
+    return `${hh}:${mm}`;
+  }
+  return s;
+}
+
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const match = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+  return 0;
 }
 
 function escapeHtml(str) { return String(str||'').replace(/[&<>'"]/g, tag => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[tag])); }
@@ -680,15 +758,23 @@ function renderEvents() {
   // 1. Aktivní textová oznámení / informace (vždy nahoře v záložce Akce)
   const aktivniOznameni = vsechnyViditelne
     .filter(a => (a.typ === 'Oznámení' || a.typ === 'Informace'))
-    .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
+    .sort((a, b) => {
+      const dateDiff = parseDate(b.datum) - parseDate(a.datum);
+      if (dateDiff !== 0) return dateDiff;
+      return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
+    });
 
   // 2. Hudební akce (zkoušky, koncerty, generálky)
   const hudebniAkce = vsechnyViditelne.filter(a => !a.typ.includes('Oznámení') && !a.typ.includes('Informace'));
 
-  // Nadcházející akce (dnes a v budoucnu) -> ŘAZENÍ VZESTUPNĚ (nejbližší první!)
+  // Nadcházející akce (dnes a v budoucnu) -> ŘAZENÍ VZESTUPNĚ (nejbližší první, při shodě dne podle času začátku!)
   const nadchazejiciAkce = hudebniAkce
     .filter(a => parseDate(a.datum) >= todayTs)
-    .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
+    .sort((a, b) => {
+      const dateDiff = parseDate(a.datum) - parseDate(b.datum);
+      if (dateDiff !== 0) return dateDiff;
+      return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
+    });
 
   // Proběhlé hudební akce
   const probehleAkce = hudebniAkce
@@ -698,9 +784,13 @@ function renderEvents() {
   const archivOznameni = vsechnyViditelne
     .filter(a => a.typ === 'Oznámení (Archiv)' || a.typ === 'Informace (Infoarchiv)' || a.typ === 'Informace (Historie)');
 
-  // SPOLEČNÁ HISTORIE: sjednocení proběhlých akcí i informací a seřazení od NEJNOVĚJŠÍCH k NEJSTARŠÍM
+  // SPOLEČNÁ HISTORIE: sjednocení proběhlých akcí i informací a seřazení od NEJNOVĚJŠÍCH k NEJSTARŠÍM (ve stejném dni podle času začátku)
   const historieVse = [...probehleAkce, ...archivOznameni]
-    .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
+    .sort((a, b) => {
+      const dateDiff = parseDate(b.datum) - parseDate(a.datum);
+      if (dateDiff !== 0) return dateDiff;
+      return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
+    });
 
   // --- VYKRESLENÍ ZÁLOŽKY „AKCE“ ---
   aktivniOznameni.forEach(a => cont.innerHTML += generateOznameniHtml(a, canEdit));
@@ -771,10 +861,15 @@ function generateAkceHtml(akce, canEdit) {
             <div class="${hasProgram ? 'card-clickable-area' : ''}" ${hasProgram ? `onclick="flipCard('${cardFlipperId}')"` : ''}>
               <p style="margin-bottom:6px;">🎼 Dirigent: <strong>${escapeHtml(akce.dirigent || "Jiří Sycha")}</strong></p>
               ${akce.misto ? `<p style="margin-bottom:6px;">📍 ${escapeHtml(akce.misto)}</p>` : ''}
-              <p style="margin-bottom:6px;">🕒 Začátek: <strong>${escapeHtml(akce.casOd)}</strong></p>
-              ${akce.casDo ? `<p style="margin-bottom:6px;">⌛ Konec: <strong>${escapeHtml(akce.casDo)}</strong></p>` : ''}
-              ${akce.casSrazu ? `<p style="margin-bottom:6px;">⏰ Sraz: <strong>${escapeHtml(akce.casSrazu)}</strong></p>` : ''}
-              ${akce.zacatekGeneralky ? `<p style="margin-bottom:6px;">🎻 Generálka: <strong>${escapeHtml(akce.zacatekGeneralky)}</strong></p>` : ''}
+              ${akce.casOd && akce.casDo 
+                ? `<p style="margin-bottom:6px;">🕒 Čas: <strong>${escapeHtml(formatDisplayTime(akce.casOd))} – ${escapeHtml(formatDisplayTime(akce.casDo))}</strong></p>`
+                : (akce.casOd 
+                  ? `<p style="margin-bottom:6px;">🕒 Začátek: <strong>${escapeHtml(formatDisplayTime(akce.casOd))}</strong></p>` 
+                  : (akce.casDo 
+                    ? `<p style="margin-bottom:6px;">⌛ Konec: <strong>${escapeHtml(formatDisplayTime(akce.casDo))}</strong></p>` 
+                    : ''))}
+              ${akce.casSrazu ? `<p style="margin-bottom:6px;">⏰ Sraz: <strong>${escapeHtml(formatDisplayTime(akce.casSrazu))}</strong></p>` : ''}
+              ${akce.zacatekGeneralky ? `<p style="margin-bottom:6px;">🎻 Generálka: <strong>${escapeHtml(formatDisplayTime(akce.zacatekGeneralky))}</strong></p>` : ''}
               ${akce.damy ? `<p style="margin-bottom:6px;">👗 Dámy: ${escapeHtml(akce.damy)}</p>` : ''}
               ${akce.pani ? `<p style="margin-bottom:6px;">🤵 Páni: ${escapeHtml(akce.pani)}</p>` : ''}
               ${parsed.mainNote ? `<div class="oznameni-text formatted-note" style="margin-top: 10px; margin-bottom: 6px;">${formatRichText(parsed.mainNote)}</div>` : ''}
@@ -1230,11 +1325,19 @@ function openOrchestrModal() {
 
   const nadchazejiciAkce = vsechnyAkce
     .filter(a => parseDate(a.datum) >= todayTs)
-    .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
+    .sort((a, b) => {
+      const dateDiff = parseDate(a.datum) - parseDate(b.datum);
+      if (dateDiff !== 0) return dateDiff;
+      return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
+    });
 
   const probehleAkce = vsechnyAkce
     .filter(a => parseDate(a.datum) < todayTs)
-    .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
+    .sort((a, b) => {
+      const dateDiff = parseDate(b.datum) - parseDate(a.datum);
+      if (dateDiff !== 0) return dateDiff;
+      return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
+    });
 
   let akceOptions = "";
   if (nadchazejiciAkce.length > 0) {
@@ -1693,20 +1796,20 @@ function openAkceForm(param = null, isReadOnly = false) {
           <label>Název / Nadpis položky:</label>
           <input type="text" id="f_nazev" value="${escapeHtml(akce?.nazev||'')}" required class="modal-input" ${roAttr}>
 
-          <div style="display:flex; gap:12px;">
-            <div style="flex:1;">
-              <label>Datum:</label>
-              <input type="date" id="f_datum" value="${escapeHtml(formDateValue)}" required class="modal-input" ${roAttr}>
-            </div>
-            <div id="col_casOd" style="flex:1;">
-              <label>Čas od:</label>
-              <input type="time" id="f_casOd" value="${escapeHtml(akce?.casOd||'')}" class="modal-input" ${roAttr}>
-            </div>
+          <div>
+            <label>Datum:</label>
+            <input type="date" id="f_datum" value="${escapeHtml(formDateValue)}" required class="modal-input" ${roAttr}>
           </div>
 
-          <div id="row_casDo" style="display:none; margin-bottom:12px;">
-            <label>Konec zkoušky (čas do – volitelné):</label>
-            <input type="time" id="f_casDo" value="${escapeHtml(akce?.casDo||'')}" class="modal-input" ${roAttr}>
+          <div id="row_casy_hlavni" style="display:flex; gap:12px; margin-top:8px;">
+            <div id="col_casOd" style="flex:1;">
+              <label>Čas začátku (od):</label>
+              <input type="time" id="f_casOd" value="${escapeHtml(formatDisplayTime(akce?.casOd||''))}" class="modal-input" ${roAttr}>
+            </div>
+            <div id="row_casDo" style="flex:1;">
+              <label>Čas konce (do – volitelné):</label>
+              <input type="time" id="f_casDo" value="${escapeHtml(formatDisplayTime(akce?.casDo||''))}" class="modal-input" ${roAttr}>
+            </div>
           </div>
 
           <div id="row_misto" style="display:block;">
@@ -1717,11 +1820,11 @@ function openAkceForm(param = null, isReadOnly = false) {
           <div id="row_casy" style="display:flex; gap:12px;">
             <div style="flex:1;">
               <label>Čas srazu:</label>
-              <input type="time" id="f_casSrazu" value="${escapeHtml(akce?.casSrazu||'')}" class="modal-input" ${roAttr}>
+              <input type="time" id="f_casSrazu" value="${escapeHtml(formatDisplayTime(akce?.casSrazu||''))}" class="modal-input" ${roAttr}>
             </div>
             <div id="col_generalka" style="flex:1;">
               <label>Čas generálky:</label>
-              <input type="time" id="f_zacatekGeneralky" value="${escapeHtml(akce?.zacatekGeneralky||'')}" class="modal-input" ${roAttr}>
+              <input type="time" id="f_zacatekGeneralky" value="${escapeHtml(formatDisplayTime(akce?.zacatekGeneralky||''))}" class="modal-input" ${roAttr}>
             </div>
           </div>
 
@@ -1896,12 +1999,11 @@ function toggleAkceFields() {
   const rowDirigent = document.getElementById('row_dirigent');
   if (rowDirigent) rowDirigent.style.display = jeOznameni ? 'none' : 'block';
 
-  // Zobrazení pole pro konec zkoušky (pouze u zkoušek)
-  const rowCasDo = document.getElementById('row_casDo');
-  if (rowCasDo) rowCasDo.style.display = jeZkouska ? 'block' : 'none';
+  // Zobrazení pole pro začátek a konec akce (pro všechny akce, skryté u informací)
+  const rowCasyHlavni = document.getElementById('row_casy_hlavni');
+  if (rowCasyHlavni) rowCasyHlavni.style.display = jeOznameni ? 'none' : 'flex';
 
   document.getElementById('row_misto').style.display = jeOznameni ? 'none' : 'block';
-  document.getElementById('col_casOd').style.display = jeOznameni ? 'none' : 'block';
   document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni) ? 'none' : 'flex';
   document.getElementById('row_obleceni').style.display = (typ === 'Koncert') ? 'flex' : 'none';
   document.getElementById('col_generalka').style.display = (typ === 'Koncert') ? 'block' : 'none';
@@ -1964,8 +2066,8 @@ function submitAkceForm(e, akceId) {
     nazev: document.getElementById('f_nazev').value, 
     datum: formatDateForSave(document.getElementById('f_datum').value), 
     misto: jeOznameni ? "" : document.getElementById('f_misto').value,
-    casOd: jeOznameni ? "" : document.getElementById('f_casOd').value,
-    casDo: (jeOznameni || !jeZkouska) ? "" : (document.getElementById('f_casDo')?.value || ""),
+    casOd: jeOznameni ? "" : (document.getElementById('f_casOd')?.value || "").trim(),
+    casDo: jeOznameni ? "" : (document.getElementById('f_casDo')?.value || "").trim(),
     casSrazu: (jeZkouska || jeOznameni) ? "" : document.getElementById('f_casSrazu').value,
     zacatekGeneralky: typ !== 'Koncert' ? "" : document.getElementById('f_zacatekGeneralky').value,
     damy: typ !== 'Koncert' ? "" : document.getElementById('f_damy').value, 
