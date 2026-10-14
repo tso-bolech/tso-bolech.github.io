@@ -417,6 +417,28 @@ function parseTimeToMinutes(timeStr) {
   return 0;
 }
 
+function getAkceBarInfo(akce) {
+  const typ = String(akce.typ || "").trim();
+  let barClass = 'bar-tutti';
+  let abbr = 'Tu';
+
+  if (typ === 'Koncert') {
+    barClass = 'bar-koncert';
+    abbr = 'Ko';
+  } else if (typ === 'Generálka') {
+    barClass = 'bar-generalka';
+    abbr = 'Gz';
+  } else if (typ === 'Zkouška smyčců') {
+    barClass = 'bar-zkouska-smycce';
+    abbr = 'Sm';
+  } else if (typ === 'Zkouška dechů') {
+    barClass = 'bar-zkouska-dechy';
+    abbr = 'Dch';
+  }
+
+  return { typ, barClass, abbr };
+}
+
 function escapeHtml(str) { return String(str||'').replace(/[&<>'"]/g, tag => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[tag])); }
 
 // Bezpečný převod formátování (Markdown + auto links)
@@ -1350,18 +1372,24 @@ function openOrchestrModal() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
+  const formatOptionLabel = (a) => {
+    const info = getAkceBarInfo(a);
+    const cas = a.casOd ? ` ${formatDisplayTime(a.casOd)}` : '';
+    return `[${info.abbr}] ${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)}${cas})`;
+  };
+
   let akceOptions = "";
   if (nadchazejiciAkce.length > 0) {
-    akceOptions += nadchazejiciAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('');
+    akceOptions += nadchazejiciAkce.map(a => `<option value="${a.id}">${formatOptionLabel(a)}</option>`).join('');
   } else {
-    akceOptions += probehleAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('');
+    akceOptions += probehleAkce.map(a => `<option value="${a.id}">${formatOptionLabel(a)}</option>`).join('');
   }
 
   let historyGroupHtml = "";
   if (nadchazejiciAkce.length > 0 && probehleAkce.length > 0) {
     historyGroupHtml = `
       <optgroup id="orch_history_group" label="── Proběhlé akce ──" style="display:none;">
-        ${probehleAkce.map(a => `<option value="${a.id}">📜 ${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('')}
+        ${probehleAkce.map(a => `<option value="${a.id}">📜 ${formatOptionLabel(a)}</option>`).join('')}
       </optgroup>
     `;
   }
@@ -1402,6 +1430,7 @@ function openOrchestrModal() {
             ${akceOptions}
             ${historyGroupHtml}
           </select>
+          <div id="orch_active_badge_row" style="margin-top:6px; display:flex; align-items:center; gap:8px;"></div>
         </div>
 
         <div style="margin-bottom:10px; margin-left:4px; margin-right:4px; background:var(--bg); padding:8px 10px; border-radius:8px; border:1px solid var(--border);">
@@ -1464,6 +1493,20 @@ function onOrchModalAkceChange() {
   const akceId = document.getElementById("orch_modal_akce").value;
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   const datumAkce = akce ? akce.datum : "";
+
+  const badgeContainer = document.getElementById("orch_active_badge_row");
+  if (badgeContainer && akce) {
+    const info = getAkceBarInfo(akce);
+    const casText = akce.casOd ? ` • ${formatDisplayTime(akce.casOd)}${akce.casDo ? '–' + formatDisplayTime(akce.casDo) : ''}` : '';
+    badgeContainer.innerHTML = `
+      <span class="card-top-bar ${info.barClass}" style="display:inline-flex; align-items:center; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; width:auto; margin:0;">
+        ${info.abbr} · ${escapeHtml(info.typ)}
+      </span>
+      <span style="font-size:12px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        ${formatDisplayDate(akce.datum)}${casText}
+      </span>
+    `;
+  }
 
   const savedCfg = (appData.orchestraConfig && appData.orchestraConfig[akceId]) ||
                    JSON.parse(localStorage.getItem(`bolech_orch_${akceId}`) || "{}");
@@ -2621,14 +2664,22 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
       }
     }
 
-    if (efektivniNastroj === 'Partitura') return nota.sekce === 'Partitura';
-    if (nota.sekce === efektivniNastroj) return true;
-    
-    if (nota.sekce === 'Housle' && (efektivniNastroj === '1. Housle' || efektivniNastroj === '2. Housle')) return true;
-    if (nota.sekce === 'Smyčce' && ['1. Housle', '2. Housle', 'Violy', 'Violoncella', 'Kontrabasy'].includes(efektivniNastroj)) return true;
-    if (nota.sekce === 'Dechy' && ['Flétny', 'Hoboje', 'Klarinety / Saxofony', 'Fagoty', 'Lesní rohy', 'Trubky', 'Trombóny a Tuba'].includes(efektivniNastroj)) return true;
-    if (nota.sekce === 'Dřeva' && ['Flétny', 'Hoboje', 'Klarinety / Saxofony', 'Fagoty'].includes(efektivniNastroj)) return true;
-    if (nota.sekce === 'Žestě' && ['Lesní rohy', 'Trubky', 'Trombóny a Tuba'].includes(efektivniNastroj)) return true;
+    const secRaw = String(nota.sekce || '').trim();
+    const prirazeneSekce = secRaw.split(/[,;/+]/).map(s => s.trim()).filter(Boolean);
+
+    if (efektivniNastroj === 'Partitura') {
+      return prirazeneSekce.includes('Partitura');
+    }
+
+    // Kontrola všech sekcí přiřazených k této notě
+    for (const sec of prirazeneSekce) {
+      if (sec === efektivniNastroj) return true;
+      if (sec === 'Housle' && (efektivniNastroj === '1. Housle' || efektivniNastroj === '2. Housle')) return true;
+      if (sec === 'Smyčce' && ['1. Housle', '2. Housle', 'Violy', 'Violoncella', 'Kontrabasy'].includes(efektivniNastroj)) return true;
+      if (sec === 'Dechy' && ['Flétny', 'Hoboje', 'Klarinety / Saxofony', 'Fagoty', 'Lesní rohy', 'Trubky', 'Trombóny a Tuba'].includes(efektivniNastroj)) return true;
+      if (sec === 'Dřeva' && ['Flétny', 'Hoboje', 'Klarinety / Saxofony', 'Fagoty'].includes(efektivniNastroj)) return true;
+      if (sec === 'Žestě' && ['Lesní rohy', 'Trubky', 'Trombóny a Tuba'].includes(efektivniNastroj)) return true;
+    }
     return false;
   });
 
@@ -2871,6 +2922,43 @@ function odeslatMailtoOdkaz() {
   window.location.href = mailtoLink;
 }
 
+function pridatSekciKNote(sIdx, fIdx, novaSekce) {
+  if (!novaSekce) return;
+  const soub = window.stromSlozek[sIdx]?.soubory[fIdx];
+  if (!soub) return;
+
+  let secs = String(soub.sekce || '').split(/[,;/+]/).map(s => s.trim()).filter(Boolean);
+  if (!secs.includes(novaSekce)) {
+    secs.push(novaSekce);
+    soub.sekce = secs.join(', ');
+    soub._zmenaSekce = true;
+
+    const n = (appData.noty || []).find(item => item.odkaz === soub.odkaz);
+    if (n) n.sekce = soub.sekce;
+
+    oznacNeulozeneZmeny();
+    vykresliAdminNoty();
+  }
+}
+
+function odebratSekciZNoty(sIdx, fIdx, odebiranaSekce) {
+  const soub = window.stromSlozek[sIdx]?.soubory[fIdx];
+  if (!soub) return;
+
+  let secs = String(soub.sekce || '').split(/[,;/+]/).map(s => s.trim()).filter(Boolean);
+  if (secs.length > 1) {
+    secs = secs.filter(s => s !== odebiranaSekce);
+    soub.sekce = secs.join(', ');
+    soub._zmenaSekce = true;
+
+    const n = (appData.noty || []).find(item => item.odkaz === soub.odkaz);
+    if (n) n.sekce = soub.sekce;
+
+    oznacNeulozeneZmeny();
+    vykresliAdminNoty();
+  }
+}
+
 function vykresliAdminNoty() {
   const cont = document.getElementById('adminNotyContainer');
   if (!cont) return;
@@ -2951,26 +3039,63 @@ function vykresliAdminNoty() {
           </summary>
           
           <div class="folder-content" style="padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg);">
-            ${s.soubory.map(soub => {
+            ${s.soubory.map((soub, fIdx) => {
               const isSelected = window.vybraneNotyKEmailu.some(n => n.odkaz === soub.odkaz);
+              const secs = String(soub.sekce || '').split(/[,;/+]/).map(x => x.trim()).filter(Boolean);
+
+              // Rychlá tlačítka pro nejčastější sdílení
+              let rychlyNavrh = '';
+              if (secs.includes('1. Housle') && !secs.includes('2. Housle')) {
+                rychlyNavrh = `<button type="button" class="btn" style="padding:2px 8px; font-size:11px; background:rgba(139,92,246,0.15); color:var(--text); border:1px solid #8b5cf6;" onclick="pridatSekciKNote(${index}, ${fIdx}, '2. Housle')">+ 2. Housle</button>`;
+              } else if (secs.includes('2. Housle') && !secs.includes('1. Housle')) {
+                rychlyNavrh = `<button type="button" class="btn" style="padding:2px 8px; font-size:11px; background:rgba(37,99,235,0.15); color:var(--text); border:1px solid #2563eb;" onclick="pridatSekciKNote(${index}, ${fIdx}, '1. Housle')">+ 1. Housle</button>`;
+              } else if ((secs.some(x => x.includes('Violoncell') || x.toLowerCase().includes('basso'))) && !secs.includes('Kontrabasy')) {
+                rychlyNavrh = `<button type="button" class="btn" style="padding:2px 8px; font-size:11px; background:rgba(5,150,105,0.15); color:var(--text); border:1px solid #059669;" onclick="pridatSekciKNote(${index}, ${fIdx}, 'Kontrabasy')">+ Kontrabasy</button>`;
+              } else if ((secs.some(x => x.includes('Kontrabas') || x.toLowerCase().includes('basso'))) && !secs.includes('Violoncella')) {
+                rychlyNavrh = `<button type="button" class="btn" style="padding:2px 8px; font-size:11px; background:rgba(217,119,6,0.15); color:var(--text); border:1px solid #d97706;" onclick="pridatSekciKNote(${index}, ${fIdx}, 'Violoncella')">+ Violoncella</button>`;
+              }
+
+              // Výběr jakéhokoliv dalšího nástroje z partitury
+              const dalsiSekceOptions = PARTITURA_SECTIONS
+                .filter(sec => !secs.includes(sec))
+                .map(sec => `<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`)
+                .join('');
 
               return `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card, transparent); gap: 8px;">
-                <a href="${soub.odkaz.replace(/\/view.*/, '/preview')}" target="_blank" style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--primary); text-decoration: none; font-weight: 600; cursor: pointer;">
-                  📄 <span style="text-decoration: underline;">${escapeHtml(soub.kratkyNazev)}</span>
-                </a>
-                
-                <span style="font-size: 11px; opacity: 0.8; white-space: nowrap; background: var(--border); padding: 4px 6px; border-radius: 4px; color: var(--text);">${escapeHtml(String(soub.sekce||''))}</span>
-                
-                <button type="button" 
-                        class="btn-nota-mail ${isSelected ? 'is-selected' : ''}" 
-                        onclick="toggleMailSelection('${soub.odkaz}', '${escapeHtml(soub.skladba)}', '${escapeHtml(soub.sekce||'')}', this)" 
-                        title="${isSelected ? 'Odebrat z výběru k odeslání' : 'Přidat do výběru k odeslání'}">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <path d="M22 6l-10 7L2 6"/>
-                  </svg>
-                </button>
+              <div style="border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg-card, transparent); display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                  <a href="${soub.odkaz.replace(/\/view.*/, '/preview')}" target="_blank" style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--primary); text-decoration: none; font-weight: 600; cursor: pointer;">
+                    📄 <span style="text-decoration: underline;">${escapeHtml(soub.kratkyNazev)}</span>
+                  </a>
+                  
+                  <button type="button" 
+                          class="btn-nota-mail ${isSelected ? 'is-selected' : ''}" 
+                          onclick="toggleMailSelection('${soub.odkaz}', '${escapeHtml(soub.skladba)}', '${escapeHtml(soub.sekce||'')}', this)" 
+                          title="${isSelected ? 'Odebrat z výběru k odeslání' : 'Přidat do výběru k odeslání'}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                      <path d="M22 6l-10 7L2 6"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Štítky přiřazených sekcí a tlačítka přidání -->
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px;">
+                  <span style="color: var(--text-muted); font-size: 11px;">Part pro:</span>
+                  ${secs.map((sName, sIdx) => `
+                    <span style="display: inline-flex; align-items: center; gap: 4px; background: ${sIdx === 0 ? 'var(--border)' : 'rgba(59, 130, 246, 0.15)'}; color: var(--text); padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">
+                      ${escapeHtml(sName)}
+                      ${sIdx > 0 ? `<span style="cursor: pointer; color: var(--danger); font-weight: bold; margin-left: 2px;" onclick="odebratSekciZNoty(${index}, ${fIdx}, '${escapeHtml(sName)}')" title="Odebrat z této sekce">✕</span>` : ''}
+                    </span>
+                  `).join('')}
+
+                  ${rychlyNavrh}
+
+                  <select style="padding: 2px 6px; font-size: 11px; border-radius: 4px; border: 1px dashed var(--border); background: var(--surface); color: var(--text); cursor: pointer;" onchange="pridatSekciKNote(${index}, ${fIdx}, this.value); this.value='';">
+                    <option value="">+ Další nástroj...</option>
+                    ${dalsiSekceOptions}
+                  </select>
+                </div>
               </div>
               `;
             }).join('')}
@@ -3007,16 +3132,19 @@ function ulozitZmenyNot(e) {
       const novaAktivni = chk.checked;
       const novyProgram = inputProg.value.trim();
 
-      if (s.aktivni !== novaAktivni || s.program !== novyProgram) {
-        const stavText = novaAktivni ? 'ANO' : '';
-        s.soubory.forEach(soubor => {
+      const stavText = novaAktivni ? 'ANO' : '';
+      const folderChanged = (s.aktivni !== novaAktivni || s.program !== novyProgram);
+
+      s.soubory.forEach(soubor => {
+        if (folderChanged || soubor._zmenaSekce) {
           zmeny.push({
             odkaz: soubor.odkaz,
             aktivni: stavText,
-            program: novyProgram
+            program: novyProgram,
+            sekce: soubor.sekce
           });
-        });
-      }
+        }
+      });
     }
   });
 
