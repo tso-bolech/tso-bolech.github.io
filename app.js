@@ -161,62 +161,6 @@ function updateThemeIcon(isDark) {
 }
 initTheme(); 
 
-// =====================================================
-// PŘEPÍNAČ ZOBRAZENÍ: MOBILNÍ VS. PC (POUZE PRO ADMINA)
-// =====================================================
-function isAdminUser(u = user) {
-  if (!u || !u.role) return false;
-  return String(u.role).trim().toLowerCase().includes('admin');
-}
-
-function initLayoutMode() {
-  const btn = document.getElementById('layoutToggleBtn');
-  if (!isAdminUser()) {
-    document.body.classList.remove('desktop-mode');
-    if (btn) btn.style.display = 'none';
-    return;
-  }
-
-  // Admin má tlačítko viditelné
-  if (btn) btn.style.display = 'inline-flex';
-
-  const savedMode = localStorage.getItem('bolech_layout_mode');
-  if (savedMode === 'desktop') {
-    document.body.classList.add('desktop-mode');
-    updateLayoutIcon(true);
-  } else if (savedMode === 'mobile') {
-    document.body.classList.remove('desktop-mode');
-    updateLayoutIcon(false);
-  } else {
-    // Automatická detekce při prvním spuštění na PC (myš + široké okno)
-    const isPC = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches;
-    if (isPC) {
-      document.body.classList.add('desktop-mode');
-      updateLayoutIcon(true);
-    } else {
-      document.body.classList.remove('desktop-mode');
-      updateLayoutIcon(false);
-    }
-  }
-}
-
-function toggleLayoutMode() {
-  if (!isAdminUser()) return;
-  const isDesktop = document.body.classList.toggle('desktop-mode');
-  localStorage.setItem('bolech_layout_mode', isDesktop ? 'desktop' : 'mobile');
-  updateLayoutIcon(isDesktop);
-}
-
-function updateLayoutIcon(isDesktop) {
-  const icon = document.getElementById('layout-icon');
-  const btn = document.getElementById('layoutToggleBtn');
-  if (!icon) return;
-  icon.innerText = isDesktop ? '📱' : '🖥️';
-  if (btn) {
-    btn.title = isDesktop ? 'Přepnout na mobilní zobrazení (Admin)' : 'Přepnout na PC zobrazení (Admin)';
-  }
-}
-
 async function runGoogleScript(action, payload = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -323,7 +267,6 @@ function handleLoginSubmit(e) {
 function initApp() {
   document.getElementById("mainApp").style.display = "block";
   document.getElementById("userBadge").innerText = user.name;
-  initLayoutMode();
   
   const canEdit = hasEditRights(user.role);
   const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
@@ -356,10 +299,32 @@ function initApp() {
   });
 }
 
+const CZECH_DAYS_SHORT = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return "";
+  const s = String(dateStr).trim();
+  if (/^(Po|Út|Ut|St|Čt|Ct|Pá|Pa|So|Ne)\b/i.test(s)) {
+    return s;
+  }
+  const match = s.match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+  if (match) {
+    const d = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10) - 1;
+    const y = parseInt(match[3], 10);
+    const dateObj = new Date(y, m, d);
+    const dayName = CZECH_DAYS_SHORT[dateObj.getDay()];
+    return `${dayName} ${d}. ${m + 1}. ${y}`;
+  }
+  return s;
+}
+
 function parseDate(dateStr) {
   if (!dateStr) return 0;
-  const parts = String(dateStr).trim().split('.');
-  if (parts.length >= 3) return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10)-1, parseInt(parts[0], 10)).getTime();
+  const match = String(dateStr).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+  if (match) {
+    return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10)).getTime();
+  }
   return new Date(dateStr).getTime() || 0;
 }
 
@@ -794,7 +759,7 @@ function generateAkceHtml(akce, canEdit) {
           
           <div class="card-top-bar ${barClass}">
             <span>${akce.typ}</span>
-            <span>${akce.datum}</span>
+            <span>${formatDisplayDate(akce.datum)}</span>
           </div>
 
           <div class="card-body" style="padding-bottom: 0;">
@@ -875,7 +840,7 @@ function generateOznameniHtml(akce, canEdit, isArchiv = false) {
     <div class="${cardClass}">
       <div class="${barClass}">
         <span>${badgeTitle}</span>
-        <span>${akce.datum}</span>
+        <span>${formatDisplayDate(akce.datum)}</span>
       </div>
       <div class="card-body" style="padding-top:12px;">
         <div class="card-title-row" style="margin-bottom:4px;">
@@ -1239,7 +1204,7 @@ function openStageModalForAkce(akceId) {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px; padding: 0 4px;">
           <div>
             <h3 style="margin:0; font-size:1.15rem; color:var(--primary);">${escapeHtml(akce ? akce.nazev : "Obsazení orchestru")}</h3>
-            <span style="font-size:0.82rem; color:var(--text-muted);">${escapeHtml(akce ? akce.datum : "")}</span>
+            <span style="font-size:0.82rem; color:var(--text-muted);">${escapeHtml(akce ? formatDisplayDate(akce.datum) : "")}</span>
           </div>
           <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer; padding:4px 8px;" onclick="document.getElementById('viewStageModal').remove()">✕</button>
         </div>
@@ -1273,16 +1238,16 @@ function openOrchestrModal() {
 
   let akceOptions = "";
   if (nadchazejiciAkce.length > 0) {
-    akceOptions += nadchazejiciAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${a.datum})</option>`).join('');
+    akceOptions += nadchazejiciAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('');
   } else {
-    akceOptions += probehleAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${a.datum})</option>`).join('');
+    akceOptions += probehleAkce.map(a => `<option value="${a.id}">${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('');
   }
 
   let historyGroupHtml = "";
   if (nadchazejiciAkce.length > 0 && probehleAkce.length > 0) {
     historyGroupHtml = `
       <optgroup id="orch_history_group" label="── Proběhlé akce ──" style="display:none;">
-        ${probehleAkce.map(a => `<option value="${a.id}">📜 ${escapeHtml(a.nazev)} (${a.datum})</option>`).join('')}
+        ${probehleAkce.map(a => `<option value="${a.id}">📜 ${escapeHtml(a.nazev)} (${formatDisplayDate(a.datum)})</option>`).join('')}
       </optgroup>
     `;
   }
@@ -2097,11 +2062,11 @@ function saveDuvod(id, datum, btn) {
 
 function formatDateForInput(dateStr) {
   if (!dateStr) return "";
-  const parts = String(dateStr).trim().split('.');
-  if (parts.length === 3) {
-    const d = parts[0].trim().padStart(2, '0');
-    const m = parts[1].trim().padStart(2, '0');
-    const y = parts[2].trim();
+  const match = String(dateStr).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+  if (match) {
+    const d = match[1].padStart(2, '0');
+    const m = match[2].padStart(2, '0');
+    const y = match[3];
     return `${y}-${m}-${d}`;
   }
   return dateStr;
@@ -2111,7 +2076,12 @@ function formatDateForSave(isoDate) {
   if (!isoDate) return "";
   const parts = String(isoDate).split('-');
   if (parts.length === 3) {
-    return `${parseInt(parts[2], 10)}. ${parseInt(parts[1], 10)}. ${parts[0]}`;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dateObj = new Date(y, m, d);
+    const dayName = CZECH_DAYS_SHORT[dateObj.getDay()];
+    return `${dayName} ${d}. ${m + 1}. ${y}`;
   }
   return isoDate;
 }
