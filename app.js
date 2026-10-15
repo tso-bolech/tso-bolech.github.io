@@ -320,12 +320,160 @@ function handleLoginSubmit(e) {
   }); 
 }
 
+// =========================================================================
+// ZPRÁVY A NOVINKY PRO EDITORY (PO KLIKNUTÍ NA ŽÁROVKU 💡)
+// Ukládají se v Google Sheets stejně jako akce (cílová skupina: editory)
+// =========================================================================
+function initAdminNewsBulb(canEdit) {
+  const badgeEl = document.getElementById("userBadge");
+  if (!badgeEl) return;
+
+  let bulbBtn = document.getElementById("adminBulbBtn");
+  if (!bulbBtn && canEdit) {
+    bulbBtn = document.createElement("button");
+    bulbBtn.id = "adminBulbBtn";
+    bulbBtn.type = "button";
+    bulbBtn.title = "Novinky a tipy pro editory";
+    bulbBtn.innerHTML = "💡";
+    bulbBtn.style.background = "transparent";
+    bulbBtn.style.border = "none";
+    bulbBtn.style.cursor = "pointer";
+    bulbBtn.style.fontSize = "18px";
+    bulbBtn.style.padding = "2px 4px";
+    bulbBtn.style.marginLeft = "6px";
+    bulbBtn.style.verticalAlign = "middle";
+    bulbBtn.style.lineHeight = "1";
+    bulbBtn.style.display = "inline-flex";
+    bulbBtn.style.alignItems = "center";
+    bulbBtn.style.justifyContent = "center";
+    bulbBtn.style.transition = "transform 0.15s ease";
+    bulbBtn.onmouseenter = () => bulbBtn.style.transform = "scale(1.25)";
+    bulbBtn.onmouseleave = () => bulbBtn.style.transform = "scale(1)";
+    bulbBtn.onclick = (e) => {
+      if (e) e.stopPropagation();
+      openAdminNewsModal();
+    };
+    badgeEl.insertAdjacentElement("afterend", bulbBtn);
+  } else if (bulbBtn) {
+    bulbBtn.style.display = canEdit ? "inline-flex" : "none";
+  }
+}
+
+function openAdminNewsForm() {
+  const existing = document.getElementById('adminNewsModal');
+  if (existing) existing.remove();
+
+  checkAndOpenAkceForm(null);
+  setTimeout(() => {
+    const typSel = document.getElementById('f_typ');
+    if (typSel) {
+      typSel.value = 'Informace';
+      toggleAkceFields();
+    }
+    const csSel = document.getElementById('f_cilovaSkupina');
+    if (csSel) {
+      csSel.value = 'editory';
+    }
+    const nazevIn = document.getElementById('f_nazev');
+    if (nazevIn) {
+      nazevIn.placeholder = 'např. Důležité novinky v zadávání zkoušek...';
+      nazevIn.focus();
+    }
+  }, 80);
+}
+
+function openAdminNewsModal() {
+  const existing = document.getElementById('adminNewsModal');
+  if (existing) { existing.remove(); return; }
+
+  // Načteme všechny položky určené pro editory seřazené od nejnovější
+  const newsItems = (appData.akce || [])
+    .filter(a => {
+      const cs = String(a.cilovaSkupina || '').trim().toLowerCase();
+      const t = String(a.typ || '').trim();
+      return cs === 'editory' || t === 'Informace pro editory';
+    })
+    .sort((a, b) => parseDate(b.datum) - parseDate(a.datum));
+
+  let newsHtml = '';
+  if (newsItems.length === 0) {
+    newsHtml = `
+      <div style="text-align: center; padding: 28px 12px; color: var(--text-muted); font-size: 14px;">
+        Zatím nebyly vloženy žádné zprávy pro editory.
+      </div>
+    `;
+  } else {
+    newsItems.forEach(item => {
+      const parsed = parsovatPoznamku(item.poznamka);
+      const canEdit = hasEditRights(user.role);
+      const editBtn = canEdit ? `
+        <button type="button" style="background: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font-size: 12px; color: var(--primary-light); cursor: pointer; white-space:nowrap;" onclick="document.getElementById('adminNewsModal').remove(); checkAndOpenAkceForm('${escapeHtml(item.id)}');" title="Upravit položku">
+          ✏️ Upravit
+        </button>
+      ` : '';
+
+      newsHtml += `
+        <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 8px; gap: 8px;">
+            <div>
+              <strong style="font-size: 15px; color: var(--text); display: block;">${escapeHtml(item.nazev)}</strong>
+              <span style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">${escapeHtml(formatDisplayDate(item.datum))}</span>
+            </div>
+            ${editBtn}
+          </div>
+          ${parsed.mainNote ? `<div style="font-size: 13.5px; line-height: 1.5; color: var(--text); margin-bottom: 4px;">${formatRichText(parsed.mainNote)}</div>` : ''}
+          ${formatHarmonogramHtml(parsed.schedData)}
+          ${formatProgramHtml(parsed.progData)}
+        </div>
+      `;
+    });
+  }
+
+  const isAdmin = isAdminUser(user);
+  const addBtnHtml = isAdmin ? `
+    <button type="button" class="btn" style="background: var(--success); color: white; width: 100%; margin-bottom: 14px; font-size: 13.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px;" onclick="openAdminNewsForm()">
+      ➕ Přidat novou zprávu pro editory
+    </button>
+  ` : '';
+
+  const html = `
+    <div id="adminNewsModal" class="modal-overlay" style="padding: 6px;" onclick="if(event.target===this) document.getElementById('adminNewsModal').remove()">
+      <div class="modal-box" style="max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <div style="display:flex; align-items:center; gap: 8px;">
+            <span style="font-size: 22px;">💡</span>
+            <div>
+              <h3 style="margin:0; font-size: 1.15rem; color: var(--text);">Novinky a pokyny pro editory</h3>
+              <small style="color: var(--primary-light); font-weight: 700; font-size: 11px;">🔒 Viditelné pouze pro vedení a dirigenty</small>
+            </div>
+          </div>
+          <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer; padding: 4px;" onclick="document.getElementById('adminNewsModal').remove()">✕</button>
+        </div>
+
+        ${addBtnHtml}
+
+        <div style="margin-bottom: 16px;">
+          ${newsHtml}
+        </div>
+
+        <button type="button" class="btn" style="width: 100%; background: var(--primary); font-weight: 700;" onclick="document.getElementById('adminNewsModal').remove()">
+          Zavřít
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
 function initApp() {
   document.getElementById("mainApp").style.display = "block";
   document.getElementById("userBadge").innerText = user.name;
   initLayoutMode();
   
   const canEdit = hasEditRights(user.role);
+  initAdminNewsBulb(canEdit);
   const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
   
   const adminNavBtn = document.getElementById('btn-nav-admin');
@@ -528,6 +676,11 @@ function isEventVisibleForUser(akce) {
   const jeInfo = typ.includes("Oznámení") || typ.includes("Informace");
   const cilovaSkupina = String(akce.cilovaSkupina || "vsichni").trim().toLowerCase();
   const userRole = String(user.role || "").trim().toLowerCase();
+
+  // Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡 (nezobrazují se na zdi)
+  if (cilovaSkupina === "editory" || typ === "Informace pro editory") {
+    return false;
+  }
 
   // Kontrola interních zpráv pro vedení a výbor
   if (cilovaSkupina === "vedeni") {
@@ -1829,11 +1982,12 @@ function openAkceForm(param = null, isReadOnly = false) {
           <div id="row_cilovaSkupina" style="display:none; margin-bottom:14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
             <label style="font-weight:700; display:block; margin-bottom:6px; font-size:13px; color:var(--text);">Komu je informace určena:</label>
             <select id="f_cilovaSkupina" class="modal-input" style="margin-bottom:4px; font-size:14px;" ${roAttr}>
-              <option value="vsichni" ${cilovaSkupinaValue!=='vedeni' ? 'selected' : ''}>🌐 Celý orchestr (veřejná informace)</option>
+              <option value="vsichni" ${cilovaSkupinaValue!=='vedeni' && cilovaSkupinaValue!=='editory' ? 'selected' : ''}>🌐 Celý orchestr (veřejná informace)</option>
               <option value="vedeni" ${cilovaSkupinaValue==='vedeni' ? 'selected' : ''}>🔒 Pouze vedení a výbor (interní informace)</option>
+              ${isAdminUser(user) ? `<option value="editory" ${cilovaSkupinaValue==='editory' ? 'selected' : ''}>💡 Pouze editoři (Novinky v žárovce)</option>` : ''}
             </select>
             <small style="color:var(--text-muted); font-size:12px; display:block; line-height:1.3;">
-              Interní informace uvidí pouze dirigent, vedení a pomocníci výboru. Běžným muzikantům se nezobrazí.
+              ${isAdminUser(user) ? 'Volbu „Pouze editoři“ máte k dispozici pouze vy jako správce systému. Zpráva se nezobrazí na zdi, ale v žárovce 💡.' : 'Interní informace uvidí pouze dirigent, vedení a pomocníci výboru. Běžným muzikantům se nezobrazí.'}
             </small>
           </div>
 
