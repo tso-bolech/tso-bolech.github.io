@@ -79,7 +79,7 @@ function hasEditRights(role) {
 function isCommitteeMember(role) {
   if (!role) return false;
   const r = String(role).trim().toLowerCase();
-  return hasEditRights(r) || r.includes('výbor') || r.includes('vybor') || r.includes('pomocník') || r.includes('pomocnik');
+  return hasEditRights(r) || r.includes('výbor') || r.includes('vybor') || r.includes('pomocn');
 }
 
 // =====================================================
@@ -2260,8 +2260,8 @@ function openMailBroadcastModal() {
         <label style="font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Příjemci zprávy:</label>
         <select id="mail_target_group" class="modal-input" onchange="updateBroadcastRecipientCount()" style="margin-bottom:10px;">
           <option value="all">👥 Všichni aktivní členové orchestru</option>
-          <option value="management">🏛️ Pouze vedení a dirigent</option>
-          <option value="both">👥🏛️ Všichni členové + celé vedení</option>
+          <option value="committee">🏛️ Výbor (včetně pomocníků výboru)</option>
+          <option value="both">👥🏛️ Všichni členové + výbor</option>
           <option value="strings">🎻 Pouze smyčcová sekce</option>
           <option value="winds">🎺 Pouze dechová sekce</option>
           <option value="guests">👥 Pouze aktivní hosté</option>
@@ -2308,18 +2308,19 @@ function getBroadcastEmails(targetGroup) {
     if (!email || !email.includes("@")) return;
 
     const role = String(c.role || "").trim().toLowerCase();
-    const isLeadership = hasEditRights(role);
+    const isCommittee = isCommitteeMember(c.role);
     const sekce = String(c.sekce || "").toLowerCase();
     const isHost = role === 'host';
 
     const aktivni = String(c.aktivni || "").toUpperCase().trim();
-    const isAktivni = aktivni === 'ANO' || aktivni === 'TRUE' || aktivni === '1' || isHost;
+    // Člen je považován za adresáta, pokud je aktivní, host, nebo člen výboru / pomocník výboru
+    const isAktivni = aktivni === 'ANO' || aktivni === 'TRUE' || aktivni === '1' || isHost || isCommittee;
     if (!isAktivni) return;
 
     if (targetGroup === 'all') {
       if (!isHost) uniqueEmails.add(email);
-    } else if (targetGroup === 'management') {
-      if (isLeadership) uniqueEmails.add(email);
+    } else if (targetGroup === 'committee' || targetGroup === 'management') {
+      if (isCommittee) uniqueEmails.add(email);
     } else if (targetGroup === 'both') {
       uniqueEmails.add(email);
     } else if (targetGroup === 'strings') {
