@@ -3108,7 +3108,7 @@ function pridatSekciKNote(sIdx, fIdx, novaSekce) {
     if (n) n.sekce = soub.sekce;
 
     oznacNeulozeneZmeny();
-    vykresliAdminNoty();
+    vykresliAdminNoty(window.stromSlozek[sIdx]?.cesta);
   }
 }
 
@@ -3126,11 +3126,11 @@ function odebratSekciZNoty(sIdx, fIdx, odebiranaSekce) {
     if (n) n.sekce = soub.sekce;
 
     oznacNeulozeneZmeny();
-    vykresliAdminNoty();
+    vykresliAdminNoty(window.stromSlozek[sIdx]?.cesta);
   }
 }
 
-function vykresliAdminNoty() {
+function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
   const cont = document.getElementById('adminNotyContainer');
   if (!cont) return;
 
@@ -3139,6 +3139,30 @@ function vykresliAdminNoty() {
   cont.style.width = "100%";
 
   try {
+    const savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+
+    // 1. Zjistíme, které složky měl uživatel otevřené a jaké hodnoty byly v polích před překreslením
+    const zachovanyStavSlozek = {};
+    if (window.stromSlozek && window.stromSlozek.length > 0) {
+      window.stromSlozek.forEach((s, idx) => {
+        const chk = document.getElementById('chk_' + idx);
+        const prog = document.getElementById('prog_' + idx);
+        const det = chk ? chk.closest('details') : null;
+        zachovanyStavSlozek[s.cesta] = {
+          open: det ? det.open : false,
+          aktivni: chk ? chk.checked : s.aktivni,
+          program: prog ? prog.value : s.program
+        };
+      });
+    }
+
+    if (cestaKteraMaBytOtevrena) {
+      if (!zachovanyStavSlozek[cestaKteraMaBytOtevrena]) {
+        zachovanyStavSlozek[cestaKteraMaBytOtevrena] = {};
+      }
+      zachovanyStavSlozek[cestaKteraMaBytOtevrena].open = true;
+    }
+
     const slozkyMap = {};
 
     if (!appData.noty || appData.noty.length === 0) {
@@ -3154,14 +3178,25 @@ function vykresliAdminNoty() {
       let cesta = lastDash !== -1 ? skladbaText.substring(0, lastDash).trim() : 'Základní složka';
       let soubor = lastDash !== -1 ? skladbaText.substring(lastDash + 3).trim() : skladbaText;
 
-      if (!slozkyMap[cesta]) slozkyMap[cesta] = { cesta: cesta, soubory: [], program: '', aktivni: false };
+      if (!slozkyMap[cesta]) {
+        const st = zachovanyStavSlozek[cesta];
+        slozkyMap[cesta] = { 
+          cesta: cesta, 
+          soubory: [], 
+          program: (st && st.program !== undefined) ? st.program : '', 
+          aktivni: (st && st.aktivni !== undefined) ? st.aktivni : false 
+        };
+      }
 
       slozkyMap[cesta].soubory.push({ ...nota, kratkyNazev: soubor });
 
-      let aktivniHodnota = String(nota.aktivni || '').toUpperCase().trim();
-      if (aktivniHodnota === 'ANO' || aktivniHodnota === 'TRUE' || aktivniHodnota === '1') {
-        slozkyMap[cesta].aktivni = true;
-        if (nota.program) slozkyMap[cesta].program = nota.program;
+      // Pokud ještě nebyl stav v zachovanyStavSlozek, načteme výchozí z databáze
+      if (!zachovanyStavSlozek[cesta]) {
+        let aktivniHodnota = String(nota.aktivni || '').toUpperCase().trim();
+        if (aktivniHodnota === 'ANO' || aktivniHodnota === 'TRUE' || aktivniHodnota === '1') {
+          slozkyMap[cesta].aktivni = true;
+          if (nota.program) slozkyMap[cesta].program = nota.program;
+        }
       }
     });
 
@@ -3179,35 +3214,43 @@ function vykresliAdminNoty() {
       </style>
     `;
 
-    window.stromSlozek.forEach((s, index) => {
+        window.stromSlozek.forEach((s, index) => {
       const zobrazenyNazev = escapeHtml(s.cesta).replace(/\//g, '<span style="color:var(--text-muted); margin:0 4px;">❯</span>');
       const checkBg = s.aktivni ? 'var(--success)' : 'transparent';
       const stavTrida = s.aktivni ? 'folder-active' : 'folder-inactive';
+      
+      const st = zachovanyStavSlozek[s.cesta];
+      const isOtevreno = (st && st.open) || (s.cesta === cestaKteraMaBytOtevrena);
+      const openAttr = isOtevreno ? ' open' : '';
 
       html += `
-        <details class="card ${stavTrida}" style="margin-bottom: 8px; margin-left: 0; margin-right: 0; padding: 0; overflow: hidden; width: 100%; border: 1px solid var(--border);">
-          <summary style="padding: 10px 14px; cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border);">
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: bold; color: var(--text);">
-              <span style="word-break: break-word; line-height: 1.3;">📁 ${zobrazenyNazev} <small style="font-weight:normal; opacity:0.6;">(${s.soubory.length})</small></span>
-              <span style="opacity: 0.4; font-size: 14px; padding-left: 8px;">▼</span>
-            </div>
-
-            <div class="folder-controls" onclick="event.stopPropagation();" style="display: flex; gap: 8px; align-items: center; width: 100%;">
-              <input type="text" id="prog_${index}" class="modal-input" placeholder="Název programu..." value="${escapeHtml(s.program)}" style="flex: 1; margin: 0; padding: 10px; font-size: 14px; border-radius: 6px;" oninput="oznacNeulozeneZmeny()">  
-
-              <label style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; min-width: 44px; background: ${checkBg}; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: background 0.2s;" title="Aktivní na repertoáru">
-                <input type="checkbox" id="chk_${index}" ${s.aktivni ? 'checked' : ''} style="transform: scale(1.4); margin: 0; cursor: pointer;" 
-                       onchange="
-                         oznacNeulozeneZmeny();
-                         this.parentElement.style.background = this.checked ? 'var(--success)' : 'transparent';
-                         const det = this.closest('details');
-                         if(this.checked) { det.classList.remove('folder-inactive'); det.classList.add('folder-active'); }
-                         else { det.classList.add('folder-inactive'); det.classList.remove('folder-active'); }
-                        ">
-              </label>
-
+        <details class="card ${stavTrida}"${openAttr} data-cesta="${escapeHtml(s.cesta)}" style="margin-bottom: 8px; margin-left: 0; margin-right: 0; padding: 0; overflow: hidden; width: 100%; border: 1px solid var(--border);">
+          <!-- ČISTÉ ZÁHLAVÍ KARTY: KLIKNUTÍM SE KARTA POUZE OTEVÍRÁ / ZAVÍRÁ -->
+          <summary style="padding: 12px 14px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <span style="word-break: break-word; line-height: 1.3; font-size: 16px; font-weight: bold; color: var(--text);">
+              📁 ${zobrazenyNazev} <small style="font-weight:normal; opacity:0.6;">(${s.soubory.length})</small>
+            </span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              ${s.aktivni ? `<span style="font-size:11px; background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-weight:700;">AKTIVNÍ</span>` : ''}
+              <span style="opacity: 0.4; font-size: 14px;">▼</span>
             </div>
           </summary>
+          
+          <!-- OVLÁDÁNÍ PROGRAMU A AKTIVITY (UVNITŘ ROZBALENÉ KARTY, MIMO SUMMARY) -->
+          <div style="padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="prog_${index}" class="modal-input" placeholder="Název programu..." value="${escapeHtml(s.program)}" style="flex: 1; margin: 0; padding: 10px; font-size: 14px; border-radius: 6px;" oninput="oznacNeulozeneZmeny()">  
+
+            <label style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; min-width: 44px; background: ${checkBg}; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: background 0.2s;" title="Aktivní na repertoáru">
+              <input type="checkbox" id="chk_${index}" ${s.aktivni ? 'checked' : ''} style="transform: scale(1.4); margin: 0; cursor: pointer;" 
+                     onchange="
+                       oznacNeulozeneZmeny();
+                       this.parentElement.style.background = this.checked ? 'var(--success)' : 'transparent';
+                       const det = this.closest('details');
+                       if(this.checked) { det.classList.remove('folder-inactive'); det.classList.add('folder-active'); }
+                       else { det.classList.add('folder-inactive'); det.classList.remove('folder-active'); }
+                      ">
+            </label>
+          </div>
           
           <div class="folder-content" style="padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg);">
             ${s.soubory.map((soub, fIdx) => {
@@ -3264,12 +3307,14 @@ function vykresliAdminNoty() {
 
     cont.innerHTML = html;
     aktualizovatPlovouciListu();
+    if (savedScrollY > 0) {
+      window.scrollTo(0, savedScrollY);
+    }
 
   } catch (error) {
     cont.innerHTML = `<p style="color:var(--danger); padding:16px;">Chyba: ${error.message}</p>`;
   }
 }
-
 function ulozitZmenyNot(e) {
   const eventObj = e || window.event;
   if (eventObj && eventObj.preventDefault) eventObj.preventDefault();
