@@ -1359,7 +1359,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     if (dirSpot) {
       dirSpot.classList.add("is-selected");
       const dirPlayerLabel = `${dirigentJmeno} 🎼 (Dirigent)`;
-      const dirStatusText = dirPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`;
+      const dirStatusText = dirigentPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`;
       const dirStatusColor = "#d97706";
       showPlayerDetailBox(prefix, dirPlayerLabel, dirStatusText, dirStatusColor);
     }
@@ -1648,6 +1648,20 @@ function onOrchModalAkceChange() {
   const akceId = document.getElementById("orch_modal_akce").value;
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   const datumAkce = akce ? akce.datum : "";
+
+  // Okamžitá synchronizace dirigenta v informačním panelu pod mapkou
+  const dirigentJmeno = (akce && akce.dirigent && akce.dirigent.trim()) 
+    ? akce.dirigent.trim() 
+    : "Jiří Sycha";
+  const ucastAkce = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId));
+  const dirigentPotvrdil = ucastAkce.some(u => u.stav === "Ano" && u.jmeno === dirigentJmeno);
+
+  showPlayerDetailBox(
+    "manage",
+    `${dirigentJmeno} 🎼 (Dirigent)`,
+    dirigentPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`,
+    "#d97706"
+  );
 
   const badgeContainer = document.getElementById("orch_active_badge_row");
   if (badgeContainer && akce) {
