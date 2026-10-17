@@ -1603,6 +1603,13 @@ function openOrchestrModal() {
           <summary style="cursor:pointer; font-weight:800; font-size:0.85rem; color:var(--primary-light);">👥 Výběr konkrétních hráčů na projekt</summary>
           <div id="roster_selection_container" style="margin-top:8px;"></div>
         </details>
+        <!-- NOVÁ SEKCE: OMLUVENKY -->
+        <details id="details_omluvenky" style="margin: 0 4px 10px 4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 10px;">
+          <summary style="cursor:pointer; font-weight:800; font-size:0.85rem; color:var(--danger); display:flex; justify-content:space-between; align-items:center;">
+            <span id="omluvenky_summary_title">📋 Omluvenky (0)</span>
+          </summary>
+          <div id="omluvenky_container" style="margin-top:8px;"></div>
+        </details>      
 
         <div id="orch_preview_wrapper" style="margin-bottom: 10px;">
           ${getOrchestraSvgHtml("manage")}
@@ -1619,6 +1626,50 @@ function openOrchestrModal() {
   document.body.insertAdjacentHTML('beforeend', html);
   onOrchModalAkceChange();
 }
+
+function renderOmluvenkyList(akceId) {
+  const container = document.getElementById("omluvenky_container");
+  const titleEl = document.getElementById("omluvenky_summary_title");
+  if (!container) return;
+
+  const omluveni = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId) && u.stav === "Ne");
+
+  if (titleEl) {
+    titleEl.textContent = `📋 Omluvenky (${omluveni.length})`;
+  }
+
+  if (omluveni.length === 0) {
+    container.innerHTML = `<p style="font-size:0.82rem; color:var(--text-muted); margin:0;">K této akci nejsou evidovány žádné omluvenky.</p>`;
+    return;
+  }
+
+  // Seřazení podle sekce a jména
+  omluveni.sort((a, b) => {
+    const secComp = String(a.sekce || "").localeCompare(String(b.sekce || ""), "cs");
+    if (secComp !== 0) return secComp;
+    return String(a.jmeno || "").localeCompare(String(b.jmeno || ""), "cs");
+  });
+
+  let html = `<div style="display:flex; flex-direction:column; gap:6px;">`;
+  omluveni.forEach(item => {
+    const duvodText = (item.duvod && item.duvod.trim()) ? escapeHtml(item.duvod.trim()) : `<em style="color:var(--text-muted);">důvod neuveden</em>`;
+    html += `
+      <div style="background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--danger); border-radius:6px; padding:6px 10px; font-size:13px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+          <strong style="color:var(--text);">${escapeHtml(item.jmeno)}</strong>
+          <span style="font-size:11px; color:var(--text-muted); font-weight:600;">${escapeHtml(item.sekce || "")}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted);">
+          💬 Důvod: <span style="color:var(--text);">${duvodText}</span>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  container.innerHTML = html;
+}
+
 
 function toggleOrchHistoryEvents(pocet) {
   const optGroup = document.getElementById("orch_history_group");
@@ -1698,6 +1749,7 @@ function onOrchModalAkceChange() {
   });
 
   renderRosterSelectionInputs();
+  renderOmluvenkyList(akceId);
 }
 
 function onConcertMasterChange() {
@@ -2600,6 +2652,7 @@ function openGuestManager() {
           
           <select id="dirGuestInst" required class="modal-input" style="margin-bottom: 8px;">
             <option value="" disabled selected>Vyberte nástrojovou sekci...</option>
+            <option value="Dirigent">🎼 Dirigent (hostující)</option>
             <option value="1. Housle">1. Housle</option>
             <option value="2. Housle">2. Housle</option>
             <option value="Violy">Violy</option>
