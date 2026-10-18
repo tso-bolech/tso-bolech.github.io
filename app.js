@@ -1313,7 +1313,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     attendingBySec[sec] = attending.slice(0, capacity);
   });
 
-  function renderHexSpot(x, y, p, isKm, secName, isDir = false, dirPotvrdil = true) {
+  function renderHexSpot(x, y, p, isKm, secName, isDir = false) {
     celkemHraje++;
     const spot = document.createElementNS("http://www.w3.org/2000/svg", "g");
     spot.setAttribute("class", `hex-spot ${isKm ? 'is-km' : ''} ${isDir ? 'is-dirigent' : ''}`);
@@ -1328,11 +1328,9 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     label.textContent = isDir ? "DIR" : getPlayerDisplayLabel(p.celeJmeno, isKm);
     spot.appendChild(label);
 
-    const playerLabel = isDir ? `${p.celeJmeno} 🎼 (Dirigent)` : `${p.celeJmeno}${isKm ? " 🎻 (Koncertní mistr)" : ""}`;
-    const statusText = isDir 
-      ? (dirPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`)
-      : `✓ Potvrzena účast – ${secName}`;
-    const statusColor = isDir ? "#d97706" : "var(--success)";
+    const playerLabel = p.celeJmeno + (isKm ? " 🎻 (Koncertní mistr)" : "");
+    const statusText = isDir ? "🎼 Dirigent" : secName;
+    const statusColor = isDir ? "#d97706" : "var(--primary-light)";
 
     spot.onclick = () => {
       document.querySelectorAll(`#${prefix}-svg .hex-spot`).forEach(el => el.classList.remove("is-selected"));
@@ -1355,23 +1353,17 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   }
 
   if (dirigentJmeno) {
-    const dirSpot = renderHexSpot(330, 325, { celeJmeno: dirigentJmeno }, false, "Dirigent", true, dirigentPotvrdil);
+    const dirSpot = renderHexSpot(330, 325, { celeJmeno: dirigentJmeno }, false, "Dirigent", true);
     if (dirSpot) {
       dirSpot.classList.add("is-selected");
-      const dirPlayerLabel = `${dirigentJmeno} 🎼 (Dirigent)`;
-      const dirStatusText = dirigentPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`;
-      const dirStatusColor = "#d97706";
-      showPlayerDetailBox(prefix, dirPlayerLabel, dirStatusText, dirStatusColor);
+      showPlayerDetailBox(prefix, dirigentJmeno, "🎼 Dirigent", "#d97706");
     }
   } else {
     const detailBox = document.getElementById(`${prefix}-detail-box`);
     if (detailBox) {
       detailBox.innerHTML = `
         <div class="detail-name" style="font-size:0.95rem; font-weight:normal; color:var(--text-muted);">
-          👆 Klepněte na hráče nebo dirigenta pro detail
-        </div>
-        <div class="detail-status" style="color:var(--text-muted); font-size:0.8rem;">
-          Zobrazují se pouze ti, kteří potvrdili účast
+          👆 Klepněte na hráče pro detail
         </div>
       `;
     }
@@ -1709,8 +1701,8 @@ function onOrchModalAkceChange() {
 
   showPlayerDetailBox(
     "manage",
-    `${dirigentJmeno} 🎼 (Dirigent)`,
-    dirigentPotvrdil ? `✓ Potvrzena účast – Řídí orchestr` : `🎼 Dirigent akce – Řídí orchestr`,
+    dirigentJmeno,
+    "🎼 Dirigent",
     "#d97706"
   );
 
