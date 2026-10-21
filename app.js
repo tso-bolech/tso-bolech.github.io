@@ -680,7 +680,7 @@ function isEventVisibleForUser(akce) {
   const cilovaSkupina = String(akce.cilovaSkupina || "vsichni").trim().toLowerCase();
   const userRole = String(user.role || "").trim().toLowerCase();
 
-  // Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡 (nezobrazují se na zdi)
+  // Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡
   if (cilovaSkupina === "editory" || typ === "Informace pro editory") {
     return false;
   }
@@ -690,8 +690,17 @@ function isEventVisibleForUser(akce) {
     return isCommitteeMember(userRole);
   }
 
+  // JEDINÁ ZMĚNA: Hostující dirigent vidí POUZE akce, které diriguje
+  const isHostConductor = userRole === "host" && String(user.section || "").toLowerCase().includes("dirigent");
+  if (isHostConductor) {
+    return isUserConductorOfEvent(akce, user);
+  }
+
   if (jeInfo) return true; 
   if (hasEditRights(userRole)) return true; 
+
+  // Pokud běžný člen tuto akci diriguje (např. druhý dirigent-houslista u dechů), vidí ji
+  if (isUserConductorOfEvent(akce, user)) return true;
 
   const userSecL = String(user.section || "").toLowerCase();
   if (typ === "Zkouška smyčců") return SMYCKE_SECTIONS.some(s => userSecL.includes(s));
