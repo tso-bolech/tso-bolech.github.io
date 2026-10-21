@@ -472,15 +472,18 @@ function initApp() {
   document.getElementById("userBadge").innerText = user.name;
   initLayoutMode();
   
-  const canEdit = hasEditRights(user.role);
+  const userRole = String(user.role || "").trim().toLowerCase();
+  const canEdit = hasEditRights(user.role) || userRole.includes('veden') || userRole.includes('admin');
   initAdminNewsBulb(canEdit);
-  const jeDirigent = String(user.role || "").trim().toLowerCase() === 'dirigent';
+  const jeDirigent = userRole === 'dirigent';
   
+  // 1. Zobrazení dolní záložky "Archiv not"
   const adminNavBtn = document.getElementById('btn-nav-admin');
   if (adminNavBtn) {
     adminNavBtn.style.display = canEdit ? 'flex' : 'none';
   }
 
+  // 2. Zobrazení tlačítka historie hodin ⏱ v horní liště
   const cachedData = localStorage.getItem("bolech_data_cache");
   if (cachedData) { 
     appData = JSON.parse(cachedData); 
@@ -930,6 +933,13 @@ function renderEvents() {
         <button class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:9px; font-size:13.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="openMailBroadcastModal()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
           <span>Poslat e-mail</span>
+        </button>
+        <button type="button" class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:9px 12px; font-size:13.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="openActivityModal()" title="Historie změn a aktivit">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>Historie</span>
         </button>
       </div>`;
   }
@@ -3482,3 +3492,66 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 // Aktualizováno
+// Zobrazení tlačítka pouze pro vedení / administrátory
+function updateActivityButtonVisibility() {
+  const user = window.currentUser || JSON.parse(localStorage.getItem('bolech_auth_member') || '{}');
+  const role = (user.role || '').toLowerCase();
+  const btn = document.getElementById('btnActivityLog');
+  if (btn) {
+    btn.style.display = (role === 'vedeni' || role === 'admin') ? 'inline-flex' : 'none';
+  }
+}
+
+// Otevření a zavření okna historie
+function openActivityModal() {
+  document.getElementById('modalActivityLog').style.display = 'flex';
+  loadActivityLog();
+}
+
+function closeActivityModal() {
+  document.getElementById('modalActivityLog').style.display = 'none';
+}
+
+// Načtení dat z tabulky přes Google Apps Script
+async function loadActivityLog() {
+  const content = document.getElementById('activityLogContent');
+  content.innerHTML = '<div style="text-align: center; color: #64748b; padding: 24px;">Načítám historii...</div>';
+
+  try {
+    const res = await runGoogleScript('getActivityLog', { limit: 40 });
+    const list = res.log || [];
+    
+    if (!list || list.length === 0) {
+      content.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 24px;">Zatím nejsou zaznamenány žádné aktivity.</div>';
+      return;
+    }
+
+    let html = '';
+    list.forEach(item => {
+      let badgeClass = 'badge-obecne';
+      const cat = (item.category || '').toLowerCase();
+      if (cat.includes('akce')) badgeClass = 'badge-akce';
+      else if (cat.includes('host')) badgeClass = 'badge-hoste';
+      else if (cat.includes('noty')) badgeClass = 'badge-noty';
+      else if (cat.includes('obsazení')) badgeClass = 'badge-obsazeni';
+
+      html += `
+        <div class="activity-item">
+          <span class="activity-badge ${badgeClass}">${escapeHtml(item.category)}</span>
+          <div style="flex: 1;">
+            <div class="activity-title">${escapeHtml(item.details)}</div>
+            <div class="activity-meta">
+              <span>🕒 ${escapeHtml(item.timestamp)}</span>
+              <span>•</span>
+              <span>👤 <strong>${escapeHtml(item.user)}</strong></span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 24px;">Nepodařilo se načíst historii.</div>';
+  }
+}

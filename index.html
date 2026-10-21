@@ -149,6 +149,26 @@
     </nav> 
   </div>
 
+  <!-- VYSKAKOVACÍ OKNO: HISTORIE ZMĚN A AKTIVIT -->
+  <div id="modalActivityLog" class="activity-modal-overlay" style="display: none;" onclick="if(event.target===this) closeActivityModal()">
+    <div class="activity-modal-card">
+      <div class="activity-modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 20px;">⏱</span>
+          <h3 style="margin: 0; font-size: 17px; color: var(--text);">Historie změn a aktivit</h3>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="activity-btn-action" onclick="loadActivityLog()" title="Aktualizovat">🔄</button>
+          <button type="button" class="activity-btn-action" onclick="closeActivityModal()" title="Zavřít">✕</button>
+        </div>
+      </div>
+      
+      <div id="activityLogContent" class="activity-modal-body">
+        <div style="text-align: center; color: var(--text-muted); padding: 24px;">Načítám historii...</div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
   <script src="desktop.js"></script>
 </body>
