@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bolech-dynamic-cache-v39';
+const CACHE_NAME = 'bolech-dynamic-cache-v40';
 
 const STATIC_ASSETS = [
   './',

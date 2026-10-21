@@ -2627,25 +2627,51 @@ function sendBroadcastViaMailto() {
 // =========================================================================
 function openGuestManager() {
   let htmlHoste = "";
-  let htmlClenove = "";
   
+  // Dnešní půlnoc pro přesné porovnání dat
+  const dnes = new Date();
+  dnes.setHours(0, 0, 0, 0);
+
+  // Pomocná kontrola: Vypršela už platnost účtu?
+  const isHostStalePlatny = platnostStr => {
+    if (!platnostStr) return true;
+    const str = String(platnostStr).trim();
+    let expDate = null;
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      // Formát YYYY-MM-DD (z date picker formuláře)
+      const parts = str.split('T')[0].split('-');
+      expDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else if (/^\d{1,2}\.\s*\d{1,2}\.\s*\d{4}/.test(str)) {
+      // Formát D. M. YYYY (z Google Tabulky)
+      const parts = str.split('.');
+      expDate = new Date(parts[2].trim(), parts[1].trim() - 1, parts[0].trim());
+    } else {
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        expDate = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+      }
+    }
+
+    // Pokud je datum neplatné nebo je dnes či v budoucnu, účet je stále aktivní
+    return expDate ? expDate >= dnes : true;
+  };
+
   if (appData.clenove) {
     appData.clenove.forEach(c => {
-      if (c.role.toLowerCase() === 'host') {
+      const isHost = String(c.role || "").toLowerCase() === 'host';
+      
+      // Zobrazí se POUZE hosté, kterým ještě nevypršela platnost
+      if (isHost && isHostStalePlatny(c.platnost)) {
          htmlHoste += `<div style="padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px;">
                         <strong>${escapeHtml(c.celeJmeno)}</strong> (${escapeHtml(c.sekce)})<br>
-                        <span style="color:var(--danger); font-size:12px;">⏳ Platí do: ${escapeHtml(c.platnost)}</span>
-                      </div>`;
-      } else {
-         htmlClenove += `<div style="padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px; color:var(--text-muted);">
-                        <strong>${escapeHtml(c.celeJmeno)}</strong> (${escapeHtml(c.sekce)})
+                        <span style="color:var(--text-muted); font-size:12px;">⏳ Platí do: ${escapeHtml(c.platnost)}</span>
                       </div>`;
       }
     });
   }
   
-  if(!htmlHoste) htmlHoste = "<p style='color:var(--text-muted); font-size:13px;'>Žádní aktivní hosté.</p>";
-  if(!htmlClenove) htmlClenove = "<p style='color:var(--text-muted); font-size:13px;'>Žádní členové.</p>";
+  if (!htmlHoste) htmlHoste = "<p style='color:var(--text-muted); font-size:13px;'>Žádní aktivní hosté.</p>";
 
   let html = `
     <div id="guestModal" class="modal-overlay">
@@ -2716,14 +2742,10 @@ function openGuestManager() {
           <button type="submit" id="dirGuestBtn" class="btn" style="width:100%; background:var(--primary-light);">Vytvořit hosta a odeslat PIN</button>
         </form>
 
-        <h4 style="margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Aktivní účty (kontrola)</h4>
+        <h4 style="margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Aktivní hosté</h4>
         
         <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 6px; background: var(--bg);">
-          <h5 style="margin:0 0 8px 0; color:var(--text);">Otevřené účty hostů:</h5>
           ${htmlHoste}
-          
-          <h5 style="margin:16px 0 8px 0; color:var(--text);">Stálí členové:</h5>
-          ${htmlClenove}
         </div>
 
       </div>
