@@ -673,38 +673,64 @@ function generovatIdAkce(typ) {
   return prefix + String(max + 1).padStart(3, '0');
 }
 
-// Zabezpečené filtrování: Interní informace uvidí POUZE vedení a pomocníci výboru
+// Zabezpečené filtrování: Kdo jakou akci v kalendáři vidí
 function isEventVisibleForUser(akce) {
+  if (!akce) return false;
+
   const typ = String(akce.typ || "").trim();
   const jeInfo = typ.includes("Oznámení") || typ.includes("Informace");
   const cilovaSkupina = String(akce.cilovaSkupina || "vsichni").trim().toLowerCase();
   const userRole = String(user.role || "").trim().toLowerCase();
+  const userSecL = String(user.section || "").toLowerCase();
 
-  // Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡
+  // 1. Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡
   if (cilovaSkupina === "editory" || typ === "Informace pro editory") {
     return false;
   }
 
-  // Kontrola interních zpráv pro vedení a výbor
-  if (cilovaSkupina === "vedeni") {
-    return isCommitteeMember(userRole);
+  // 2. Pomocné vnitřní ověření: Diriguje přihlášený uživatel tuto akci?
+  const clean = str => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const uName = clean(user.name);
+  
+  // Hledáme v kolonce dirigent, ale pro jistotu i v poznámce a názvu
+  const dirField = clean(akce.dirigent);
+  const poznamkaField = clean(akce.poznamka);
+  const nazevField = clean(akce.nazev);
+  const prohledavanyText = `${dirField} ${poznamkaField} ${nazevField}`;
+
+  let jaJsemDirigent = false;
+  if (uName && prohledavanyText) {
+    if (prohledavanyText.includes(uName)) {
+      jaJsemDirigent = true;
+    } else {
+      // Shoda po slovech delších než 2 znaky (např. shoda pouze příjmení)
+      const uWords = uName.split(/\s+/).filter(w => w.length > 2);
+      jaJsemDirigent = uWords.some(w => prohledavanyText.includes(w));
+    }
   }
 
-  // JEDINÁ ZMĚNA: Hostující dirigent vidí POUZE akce, které diriguje
-  const isHostConductor = userRole === "host" && String(user.section || "").toLowerCase().includes("dirigent");
+  // 3. PRAVIDLO PRO HOSTUJÍCÍHO DIRIGENTA:
+  // Vidí výhradně akce, které sám diriguje (včetně zkoušek smyčců/dechů)
+  const isHostConductor = userRole === "host" && (userSecL.includes("dirigent") || userRole.includes("dirigent"));
   if (isHostConductor) {
-    return isUserConductorOfEvent(akce, user);
+    return jaJsemDirigent;
+  }
+
+  // 4. Běžná interní sdělení pro vedení a výbor
+  if (cilovaSkupina === "vedeni") {
+    return isCommitteeMember(userRole);
   }
 
   if (jeInfo) return true; 
   if (hasEditRights(userRole)) return true; 
 
-  // Pokud běžný člen tuto akci diriguje (např. druhý dirigent-houslista u dechů), vidí ji
-  if (isUserConductorOfEvent(akce, user)) return true;
+  // Pokud běžný člen tuto akci diriguje (např. houslista u dechů), vidí ji
+  if (jaJsemDirigent) return true;
 
-  const userSecL = String(user.section || "").toLowerCase();
+  // 5. Původní filtry pro nástrojové sekce hráčů
   if (typ === "Zkouška smyčců") return SMYCKE_SECTIONS.some(s => userSecL.includes(s));
   if (typ === "Zkouška dechů") return DECHOVE_SECTIONS.some(s => userSecL.includes(s));
+
   return true; 
 }
 
