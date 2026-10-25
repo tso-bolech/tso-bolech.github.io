@@ -3730,8 +3730,7 @@ function renderMembersList() {
       ? `<span style="background:rgba(34,197,94,0.15); color:#16a34a; font-weight:700; font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid rgba(34,197,94,0.3);">AKTIVNÍ</span>`
       : `<span style="background:rgba(148,163,184,0.15); color:#64748b; font-weight:600; font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid rgba(148,163,184,0.3);">NEAKTIVNÍ</span>`;
 
-    const roleBadge = c.role ? `<span style="background:var(--bg); border:1px solid var(--border); font-size:11px; padding:2px 6px; border-radius:4px; color:var(--text-muted);">${escapeHtml(c.role)}</span>` : "";
-
+    const roleBadge = (c.role && c.role !== 'Člen') ? `<span style="background:var(--bg); border:1px solid var(--border); font-size:11px; padding:2px 6px; border-radius:4px; color:var(--text-muted);">${escapeHtml(c.role)}</span>` : "";
     html += `
       <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13.5px;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
@@ -3808,7 +3807,7 @@ function openEditMemberModal(celeJmeno = null) {
             <div style="flex:1;">
               <label style="font-size:12px; font-weight:700;">Role v orchestru:</label>
               <select id="m_role" class="modal-input">
-                <option value="Člen" ${!clen || clen.role === 'Člen' ? 'selected' : ''}>Člen</option>
+                <option value="" ${!clen || !clen.role || clen.role === 'Člen' ? 'selected' : ''}>Běžný hráč (bez zvláštní role)</option>
                 <option value="Výbor" ${clen && clen.role === 'Výbor' ? 'selected' : ''}>Výbor</option>
                 <option value="Host" ${clen && clen.role === 'Host' ? 'selected' : ''}>Host</option>
                 <option value="Admin" ${clen && clen.role === 'Admin' ? 'selected' : ''}>Admin</option>
