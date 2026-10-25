@@ -947,8 +947,6 @@ function renderEvents() {
   archCont.innerHTML = "";
   
   const canEdit = hasEditRights(user.role);
-  
-  const canEdit = hasEditRights(user.role);
   const isAdmin = isAdminUser(user);
   
   if (canEdit) {
