@@ -948,9 +948,13 @@ function renderEvents() {
   
   const canEdit = hasEditRights(user.role);
   
+  const canEdit = hasEditRights(user.role);
+  const isAdmin = isAdminUser(user);
+  
   if (canEdit) {
     cont.innerHTML += `
       <div class="admin-actions" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+        <!-- 1. ŘADA: Přidat, Obsazení, Hosté -->
         <div style="display:flex; gap:8px;">
           <button class="btn" style="background:var(--success); color:#ffffff; flex:1; padding:10px 4px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; gap:5px;" onclick="checkAndOpenAkceForm()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -965,17 +969,24 @@ function renderEvents() {
             <span>Hosté</span>
           </button>
         </div>
-        <button class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:9px; font-size:13.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="openMailBroadcastModal()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-          <span>Poslat e-mail</span>
-        </button>
-        <button type="button" class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:9px 12px; font-size:13.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="openActivityModal()" title="Historie změn a aktivit">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-          <span>Aktivita</span>
-        </button>
+
+        <!-- 2. ŘADA: Poslat e-mail, Aktivita, Členové (pro admina) -->
+        <div style="display:flex; gap:8px;">
+          <button class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); flex:1; padding:9px 4px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:5px;" onclick="openMailBroadcastModal()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            <span>E-maily</span>
+          </button>
+          <button type="button" class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); flex:1; padding:9px 4px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:5px;" onclick="openActivityModal()" title="Historie změn a aktivit">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Aktivita</span>
+          </button>
+          ${isAdmin ? `
+            <button type="button" class="btn" style="background:var(--surface); color:var(--primary-light); border:1px solid var(--primary-light); flex:1; padding:9px 4px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:5px;" onclick="openMemberManager()" title="Správa členů orchestru">
+              <span style="font-size:15px; line-height:1;">👥</span>
+              <span>Členové</span>
+            </button>
+          ` : ''}
+        </div>
       </div>`;
   }
 
@@ -3610,5 +3621,303 @@ async function loadActivityLog() {
     content.innerHTML = html;
   } catch (err) {
     content.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 24px;">Nepodařilo se načíst historii.</div>';
+  }
+}
+
+// =========================================================================
+// SPRÁVA ČLENŮ ORCHESTRU (POUZE PRO ADMINA)
+// =========================================================================
+
+let clenoveFilterQuery = "";
+let clenoveStavFilter = "all"; // all, aktivni, neaktivni
+
+function openMemberManager() {
+  if (!isAdminUser(user)) {
+    alert("Přístup ke správě členů má pouze administrátor.");
+    return;
+  }
+
+  const existing = document.getElementById('memberManagerModal');
+  if (existing) existing.remove();
+
+  const html = `
+    <div id="memberManagerModal" class="modal-overlay" style="padding: 4px;" onclick="if(event.target===this) document.getElementById('memberManagerModal').remove()">
+      <div class="modal-box" style="max-height: 94vh; max-width: 650px; width: 100%; display: flex; flex-direction: column; padding: 12px 10px;">
+        
+        <!-- Hlavička modálu -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" style="background:transparent; border:none; font-size:20px; color:var(--text); cursor:pointer; padding:4px;" onclick="document.getElementById('memberManagerModal').remove()">←</button>
+            <h3 style="margin:0; font-size:1.15rem; color:var(--text);">👥 Seznam členů</h3>
+          </div>
+          <button type="button" class="btn" style="background:var(--success); color:#fff; padding:6px 12px; font-size:13px; font-weight:700;" onclick="openEditMemberModal(null)">
+            ➕ Přidat člena
+          </button>
+        </div>
+
+        <!-- Vyhledávání a rychlý filtr -->
+        <div style="margin-bottom: 10px; display:flex; flex-direction:column; gap:6px;">
+          <input type="search" id="memberSearchInput" class="modal-input" placeholder="🔍 Hledat jméno, sekci, e-mail..." style="margin:0; font-size:14px; padding:9px 12px;" oninput="onMemberSearchChange(this.value)">
+          
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn member-filter-btn active" data-filter="all" style="flex:1; padding:5px 8px; font-size:12px; background:var(--surface); border:1px solid var(--border); color:var(--text);" onclick="setMemberFilter('all', this)">Všichni</button>
+            <button type="button" class="btn member-filter-btn" data-filter="aktivni" style="flex:1; padding:5px 8px; font-size:12px; background:var(--surface); border:1px solid var(--border); color:var(--text);" onclick="setMemberFilter('aktivni', this)">Jen aktivní</button>
+            <button type="button" class="btn member-filter-btn" data-filter="neaktivni" style="flex:1; padding:5px 8px; font-size:12px; background:var(--surface); border:1px solid var(--border); color:var(--text);" onclick="setMemberFilter('neaktivni', this)">Neaktivní</button>
+          </div>
+        </div>
+
+        <!-- Seznam členů -->
+        <div id="membersListContainer" style="overflow-y:auto; flex:1; padding-right:2px; display:flex; flex-direction:column; gap:8px;">
+          <!-- Karty se vykreslují dynamicky -->
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  renderMembersList();
+}
+
+function onMemberSearchChange(val) {
+  clenoveFilterQuery = String(val || "").toLowerCase().trim();
+  renderMembersList();
+}
+
+function setMemberFilter(stav, btn) {
+  clenoveStavFilter = stav;
+  document.querySelectorAll('.member-filter-btn').forEach(b => {
+    b.style.background = 'var(--surface)';
+    b.style.fontWeight = 'normal';
+    b.style.borderColor = 'var(--border)';
+  });
+  btn.style.background = 'var(--primary-light)';
+  btn.style.color = '#fff';
+  btn.style.fontWeight = 'bold';
+  renderMembersList();
+}
+
+function renderMembersList() {
+  const container = document.getElementById("membersListContainer");
+  if (!container) return;
+
+  const clenove = [...(appData.clenove || [])];
+  
+  // Seřazení podle příjmení
+  clenove.sort((a, b) => {
+    const pA = a.prijmeni || a.celeJmeno.split(/\s+/).slice(-1)[0] || "";
+    const pB = b.prijmeni || b.celeJmeno.split(/\s+/).slice(-1)[0] || "";
+    return pA.localeCompare(pB, "cs");
+  });
+
+  const filtered = clenove.filter(c => {
+    const isAktivni = String(c.aktivni || "").toUpperCase() === "ANO";
+    if (clenoveStavFilter === "aktivni" && !isAktivni) return false;
+    if (clenoveStavFilter === "neaktivni" && isAktivni) return false;
+
+    if (!clenoveFilterQuery) return true;
+    const haystack = `${c.celeJmeno} ${c.sekce} ${c.email} ${c.telefon || ""} ${c.role}`.toLowerCase();
+    return haystack.includes(clenoveFilterQuery);
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:30px 10px; color:var(--text-muted); font-size:14px;">Nenalezen žádný člen odpovídající filtru.</div>`;
+    return;
+  }
+
+  let html = "";
+  filtered.forEach(c => {
+    const isAktivni = String(c.aktivni || "").toUpperCase() === "ANO";
+    const statusBadge = isAktivni 
+      ? `<span style="background:rgba(34,197,94,0.15); color:#16a34a; font-weight:700; font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid rgba(34,197,94,0.3);">AKTIVNÍ</span>`
+      : `<span style="background:rgba(148,163,184,0.15); color:#64748b; font-weight:600; font-size:11px; padding:2px 6px; border-radius:4px; border:1px solid rgba(148,163,184,0.3);">NEAKTIVNÍ</span>`;
+
+    const roleBadge = c.role ? `<span style="background:var(--bg); border:1px solid var(--border); font-size:11px; padding:2px 6px; border-radius:4px; color:var(--text-muted);">${escapeHtml(c.role)}</span>` : "";
+
+    html += `
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13.5px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+          <div>
+            <strong style="font-size:15px; color:var(--text);">${escapeHtml(c.celeJmeno)}</strong>
+            <div style="font-size:12.5px; color:var(--text-muted); margin-top:1px;">
+              🎻 ${escapeHtml(c.sekce || "Bez sekce")}
+            </div>
+          </div>
+          <div style="display:flex; gap:4px; align-items:center;">
+            ${roleBadge}
+            ${statusBadge}
+          </div>
+        </div>
+
+        <div style="font-size:13px; color:var(--text); line-height:1.4; margin-bottom:8px;">
+          <div>✉️ ${c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--primary-light); text-decoration:none;">${escapeHtml(c.email)}</a>` : '<em style="color:var(--text-muted);">E-mail neuveden</em>'}</div>
+          <div>📞 ${c.telefon ? `<a href="tel:${escapeHtml(c.telefon)}" style="color:var(--primary-light); text-decoration:none;">${escapeHtml(c.telefon)}</a>` : '<em style="color:var(--text-muted);">Telefon neuveden</em>'}</div>
+        </div>
+
+        <div style="display:flex; gap:6px; border-top:1px dashed var(--border); padding-top:8px;">
+          <button type="button" class="btn" style="flex:1; padding:6px 10px; font-size:12.5px; background:var(--surface); border:1px solid var(--border); color:var(--text);" onclick="openEditMemberModal('${escapeHtml(c.celeJmeno)}')">
+            ✏️ Upravit
+          </button>
+          <button type="button" class="btn" style="flex:1; padding:6px 10px; font-size:12.5px; background:rgba(37,99,235,0.08); border:1px solid rgba(37,99,235,0.3); color:var(--primary-light); font-weight:600;" onclick="resendPinToMember('${escapeHtml(c.celeJmeno)}', '${escapeHtml(c.email || '')}')">
+            🔑 Poslat PIN
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// Dialog úpravy / přidání člena
+function openEditMemberModal(celeJmeno = null) {
+  const isEdit = !!celeJmeno;
+  const clen = isEdit ? (appData.clenove || []).find(c => c.celeJmeno === celeJmeno) : null;
+
+  const modalHtml = `
+    <div id="memberEditFormModal" class="modal-overlay" style="padding: 4px; z-index: 10000;" onclick="if(event.target===this) document.getElementById('memberEditFormModal').remove()">
+      <div class="modal-box" style="max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+          <h3 style="margin:0; font-size:1.15rem; color:var(--text);">${isEdit ? '✏️ Úprava údajů člena' : '➕ Přidat nového člena'}</h3>
+          <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer;" onclick="document.getElementById('memberEditFormModal').remove()">✕</button>
+        </div>
+
+        <form onsubmit="submitMemberForm(event, ${isEdit ? `'${escapeHtml(celeJmeno)}'` : 'null'})">
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700;">Jméno:</label>
+              <input type="text" id="m_jmeno" class="modal-input" required value="${escapeHtml(clen ? (clen.jmeno || clen.celeJmeno.split(' ')[0]) : '')}">
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700;">Příjmení:</label>
+              <input type="text" id="m_prijmeni" class="modal-input" required value="${escapeHtml(clen ? (clen.prijmeni || clen.celeJmeno.split(' ').slice(1).join(' ')) : '')}">
+            </div>
+          </div>
+
+          <label style="font-size:12px; font-weight:700;">Nástrojová sekce:</label>
+          <select id="m_sekce" class="modal-input" style="margin-bottom:8px;" required>
+            ${PARTITURA_SECTIONS.map(s => `<option value="${s}" ${clen && clen.sekce === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+
+          <label style="font-size:12px; font-weight:700;">E-mail:</label>
+          <input type="email" id="m_email" class="modal-input" style="margin-bottom:8px;" value="${escapeHtml(clen?.email || '')}" placeholder="jmeno@domena.cz">
+
+          <label style="font-size:12px; font-weight:700;">Telefonní číslo:</label>
+          <input type="tel" id="m_telefon" class="modal-input" style="margin-bottom:8px;" value="${escapeHtml(clen?.telefon || '')}" placeholder="+420 123 456 789">
+
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700;">Role v orchestru:</label>
+              <select id="m_role" class="modal-input">
+                <option value="Člen" ${!clen || clen.role === 'Člen' ? 'selected' : ''}>Člen</option>
+                <option value="Výbor" ${clen && clen.role === 'Výbor' ? 'selected' : ''}>Výbor</option>
+                <option value="Host" ${clen && clen.role === 'Host' ? 'selected' : ''}>Host</option>
+                <option value="Admin" ${clen && clen.role === 'Admin' ? 'selected' : ''}>Admin</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700;">Stav aktivity:</label>
+              <select id="m_aktivni" class="modal-input">
+                <option value="ANO" ${!clen || String(clen.aktivni).toUpperCase() === 'ANO' ? 'selected' : ''}>ANO (Aktivní)</option>
+                <option value="NE" ${clen && String(clen.aktivni).toUpperCase() !== 'ANO' ? 'selected' : ''}>NE (Neaktivní)</option>
+              </select>
+            </div>
+          </div>
+
+          ${!isEdit ? `
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:14px; cursor:pointer;">
+              <input type="checkbox" id="m_sendPinNow" checked style="transform:scale(1.2);">
+              <span>Rovnou vygenerovat a odeslat uvítací e-mail s PINem</span>
+            </label>
+          ` : ''}
+
+          <div style="display:flex; gap:8px; margin-top:16px;">
+            <button type="submit" id="btnSaveMember" class="btn" style="background:var(--success); flex:1; font-weight:700;">
+              💾 Uložit do tabulky
+            </button>
+            <button type="button" class="btn" style="background:var(--border); color:var(--text); width:auto;" onclick="document.getElementById('memberEditFormModal').remove()">
+              Zrušit
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function submitMemberForm(e, puvodniCeleJmeno) {
+  e.preventDefault();
+  const btn = document.getElementById("btnSaveMember");
+  btn.innerText = "Ukládám...";
+  btn.disabled = true;
+
+  const jmeno = document.getElementById("m_jmeno").value.trim();
+  const prijmeni = document.getElementById("m_prijmeni").value.trim();
+  const sekce = document.getElementById("m_sekce").value;
+  const email = document.getElementById("m_email").value.trim();
+  const telefon = document.getElementById("m_telefon").value.trim();
+  const role = document.getElementById("m_role").value;
+  const aktivni = document.getElementById("m_aktivni").value;
+  const sendPinNow = document.getElementById("m_sendPinNow")?.checked || false;
+
+  const payload = {
+    isEdit: !!puvodniCeleJmeno,
+    puvodniCeleJmeno: puvodniCeleJmeno,
+    jmeno: jmeno,
+    prijmeni: prijmeni,
+    celeJmeno: `${jmeno} ${prijmeni}`.trim(),
+    sekce: sekce,
+    email: email,
+    telefon: telefon,
+    role: role,
+    aktivni: aktivni,
+    sendPinNow: sendPinNow,
+    editorJmeno: user.name
+  };
+
+  runGoogleScript("saveMember", payload).then(res => {
+    btn.disabled = false;
+    btn.innerText = "💾 Uložit do tabulky";
+
+    if (res.success) {
+      document.getElementById("memberEditFormModal").remove();
+      
+      // Aktualizujeme lokální mezipaměť členů
+      if (!appData.clenove) appData.clenove = [];
+      const idx = appData.clenove.findIndex(c => c.celeJmeno === (puvodniCeleJmeno || payload.celeJmeno));
+      
+      if (idx !== -1) {
+        appData.clenove[idx] = Object.assign(appData.clenove[idx], payload);
+      } else {
+        appData.clenove.push(payload);
+      }
+      
+      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+      renderMembersList();
+      alert("Údaje člena byly úspěšně uloženy.");
+    } else {
+      alert("Chyba při ukládání: " + res.error);
+    }
+  });
+}
+
+function resendPinToMember(celeJmeno, email) {
+  if (!email || !email.includes("@")) {
+    alert("Tento člen nemá v tabulce vyplněnou platnou e-mailovou adresu. Nejprve ji doplňte klepnutím na Upravit.");
+    return;
+  }
+
+  if (confirm(`Opravdu chcete odeslat e-mail s přihlašovacím PINem členu ${celeJmeno} na adresu ${email}?`)) {
+    runGoogleScript("resendMemberPin", { celeJmeno: celeJmeno, email: email, editorJmeno: user.name }).then(res => {
+      if (res.success) {
+        alert(`PIN byl úspěšně odeslán na adresu: ${email}`);
+      } else {
+        alert("Chyba při odesílání PINu: " + res.error);
+      }
+    });
   }
 }
