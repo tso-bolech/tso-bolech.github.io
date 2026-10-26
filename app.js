@@ -45,15 +45,15 @@ const ORCHESTRA_LAYOUT_CFG = {
   "Kontrabasy": { type: "row", y: 205, defaultCap: 4 },
   "Baskytara":  { type: "bassguitar", y: 205, defaultCap: 0 },
 
-  "Flétny":               { type: "woodwinds", defaultCap: 4 },
-  "Hoboje":               { type: "woodwinds", defaultCap: 3 },
+  "Flétny":                { type: "woodwinds", defaultCap: 4 },
+  "Hoboje":                { type: "woodwinds", defaultCap: 3 },
   "Klarinety / Saxofony":{ type: "woodwinds", defaultCap: 4 },
-  "Fagoty":               { type: "woodwinds", defaultCap: 3 },
-  "Klávesy":              { type: "woodwinds", defaultCap: 2 },
-  "Kytary":               { type: "woodwinds", defaultCap: 0 },
+  "Fagoty":                { type: "woodwinds", defaultCap: 3 },
+  "Klávesy":               { type: "woodwinds", defaultCap: 2 },
+  "Kytary":                { type: "woodwinds", defaultCap: 0 },
 
   "Lesní rohy":     { type: "brass", y: 78, defaultCap: 4 },
-  "Trubky":         { type: "brass", y: 78, defaultCap: 4 },
+  "Trubky":          { type: "brass", y: 78, defaultCap: 4 },
   "Trombóny a Tuba":{ type: "brass", y: 78, defaultCap: 4 },
   "Bicí nástroje":   { type: "percussion", y: 32, centerX: 330, spacing: 38, defaultCap: 4 }
 };
@@ -539,7 +539,6 @@ function parseDate(dateStr) {
 function formatDisplayTime(timeStr) {
   if (!timeStr) return "";
   const s = String(timeStr).trim();
-  // Pokud Google Sheets pošle ISO formát s UTC časem (např. 1899-12-30T19:00:00.000Z)
   if (s.includes('T') && (s.endsWith('Z') || s.includes('+') || s.includes('-'))) {
     const d = new Date(s);
     if (!isNaN(d.getTime())) {
@@ -548,7 +547,6 @@ function formatDisplayTime(timeStr) {
       return `${hh}:${mm}`;
     }
   }
-  // Běžný textový formát (např. "20:00" nebo "9:30")
   const match = s.match(/(\d{1,2}):(\d{2})/);
   if (match) {
     const hh = match[1].padStart(2, '0');
@@ -592,22 +590,15 @@ function getAkceBarInfo(akce) {
 
 function escapeHtml(str) { return String(str||'').replace(/[&<>'"]/g, tag => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[tag])); }
 
-// Bezpečný převod formátování (Markdown + auto links)
 function formatRichText(raw) {
   if (!raw) return "";
   let text = escapeHtml(raw);
 
-  // **tučně**
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  // *kurzíva*
   text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  // __podtržení__
   text = text.replace(/__(.*?)__/g, '<u>$1</u>');
-
-  // Klikací webové odkazy
   text = text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
-  // Odrážky na začátku řádku (- nebo •)
   const lines = text.split('\n');
   let result = '';
 
@@ -673,7 +664,6 @@ function generovatIdAkce(typ) {
   return prefix + String(max + 1).padStart(3, '0');
 }
 
-// Zabezpečené filtrování: Kdo jakou akci v kalendáři vidí
 function isEventVisibleForUser(akce) {
   if (!akce) return false;
 
@@ -683,16 +673,13 @@ function isEventVisibleForUser(akce) {
   const userRole = String(user.role || "").trim().toLowerCase();
   const userSecL = String(user.section || "").toLowerCase();
 
-  // 1. Zprávy pro editory jsou určeny výhradně do plovoucího okna žárovky 💡
   if (cilovaSkupina === "editory" || typ === "Informace pro editory") {
     return false;
   }
 
-  // 2. Pomocné vnitřní ověření: Diriguje přihlášený uživatel tuto akci?
   const clean = str => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   const uName = clean(user.name);
   
-  // Hledáme v kolonce dirigent, ale pro jistotu i v poznámce a názvu
   const dirField = clean(akce.dirigent);
   const poznamkaField = clean(akce.poznamka);
   const nazevField = clean(akce.nazev);
@@ -703,20 +690,16 @@ function isEventVisibleForUser(akce) {
     if (prohledavanyText.includes(uName)) {
       jaJsemDirigent = true;
     } else {
-      // Shoda po slovech delších než 2 znaky (např. shoda pouze příjmení)
       const uWords = uName.split(/\s+/).filter(w => w.length > 2);
       jaJsemDirigent = uWords.some(w => prohledavanyText.includes(w));
     }
   }
 
-  // 3. PRAVIDLO PRO HOSTUJÍCÍHO DIRIGENTA:
-  // Vidí výhradně akce, které sám diriguje (včetně zkoušek smyčců/dechů)
   const isHostConductor = userRole === "host" && (userSecL.includes("dirigent") || userRole.includes("dirigent"));
   if (isHostConductor) {
     return jaJsemDirigent;
   }
 
-  // 4. Běžná interní sdělení pro vedení a výbor
   if (cilovaSkupina === "vedeni") {
     return isCommitteeMember(userRole);
   }
@@ -724,10 +707,8 @@ function isEventVisibleForUser(akce) {
   if (jeInfo) return true; 
   if (hasEditRights(userRole)) return true; 
 
-  // Pokud běžný člen tuto akci diriguje (např. houslista u dechů), vidí ji
   if (jaJsemDirigent) return true;
 
-  // 5. Původní filtry pro nástrojové sekce hráčů
   if (typ === "Zkouška smyčců") return SMYCKE_SECTIONS.some(s => userSecL.includes(s));
   if (typ === "Zkouška dechů") return DECHOVE_SECTIONS.some(s => userSecL.includes(s));
 
@@ -990,12 +971,10 @@ function renderEvents() {
 
   const vsechnyViditelne = (appData.akce || []).filter(a => isEventVisibleForUser(a));
 
-  // Nastavení hranice na dnešní půlnoc (akce z dneška zůstává aktivní celý den)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayTs = today.getTime();
 
-  // 1. Aktivní textová oznámení / informace (vždy nahoře v záložce Akce)
   const aktivniOznameni = vsechnyViditelne
     .filter(a => (a.typ === 'Oznámení' || a.typ === 'Informace'))
     .sort((a, b) => {
@@ -1004,10 +983,8 @@ function renderEvents() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
-  // 2. Hudební akce (zkoušky, koncerty, generálky)
   const hudebniAkce = vsechnyViditelne.filter(a => !a.typ.includes('Oznámení') && !a.typ.includes('Informace'));
 
-  // Nadcházející akce (dnes a v budoucnu) -> ŘAZENÍ VZESTUPNĚ (nejbližší první, při shodě dne podle času začátku!)
   const nadchazejiciAkce = hudebniAkce
     .filter(a => parseDate(a.datum) >= todayTs)
     .sort((a, b) => {
@@ -1016,15 +993,12 @@ function renderEvents() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
-  // Proběhlé hudební akce
   const probehleAkce = hudebniAkce
     .filter(a => parseDate(a.datum) < todayTs);
 
-  // Archivovaná textová oznámení / informace v historii
   const archivOznameni = vsechnyViditelne
     .filter(a => a.typ === 'Oznámení (Archiv)' || a.typ === 'Informace (Infoarchiv)' || a.typ === 'Informace (Historie)');
 
-  // SPOLEČNÁ HISTORIE: sjednocení proběhlých akcí i informací a seřazení od NEJNOVĚJŠÍCH k NEJSTARŠÍM (ve stejném dni podle času začátku)
   const historieVse = [...probehleAkce, ...archivOznameni]
     .sort((a, b) => {
       const dateDiff = parseDate(b.datum) - parseDate(a.datum);
@@ -1032,7 +1006,6 @@ function renderEvents() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
-  // --- VYKRESLENÍ ZÁLOŽKY „AKCE“ ---
   aktivniOznameni.forEach(a => cont.innerHTML += generateOznameniHtml(a, canEdit));
   
   if (nadchazejiciAkce.length === 0 && aktivniOznameni.length === 0) {
@@ -1041,7 +1014,6 @@ function renderEvents() {
     nadchazejiciAkce.forEach(a => cont.innerHTML += generateAkceHtml(a, canEdit));
   }
 
-  // --- VYKRESLENÍ ZÁLOŽKY „HISTORIE“ (jednotně podle data sestupně) ---
   if (historieVse.length === 0) {
     archCont.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">Historie je prázdná.</div>`;
   } else {
@@ -1144,7 +1116,6 @@ function generateAkceHtml(akce, canEdit) {
     </div>`;
 }
 
-// VYKRESLENÍ INFORMACE: ROZLIŠENÍ VEŘEJNÉ VS. INTERNÍ (VÝBOR)
 function generateOznameniHtml(akce, canEdit, isArchiv = false) {
   const isInternal = String(akce.cilovaSkupina || "").toLowerCase() === 'vedeni';
 
@@ -1194,7 +1165,6 @@ function generateRosterHtml(akceId) {
   const potvrdili = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId) && u.stav === 'Ano');
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   
-  // Dirigent akce je pevně daný (z akce nebo výchozí Jiří Sycha)
   const dirigentJmeno = (akce && akce.dirigent && akce.dirigent.trim()) 
     ? akce.dirigent.trim() 
     : "Jiří Sycha";
@@ -1203,7 +1173,6 @@ function generateRosterHtml(akceId) {
   const grouped = {};
 
   potvrdili.forEach(p => {
-    // Pokud je to dirigent této konkrétní akce, neřadíme ho mezi hráče v sekcích
     if (p.jmeno === dirigentJmeno) {
       return;
     }
@@ -1314,7 +1283,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
 
   let celkemHraje = 0;
 
-  // Dirigent akce je daný (zadaný u akce, případně výchozí Jiří Sycha)
   const dirigentJmeno = (akce && akce.dirigent && akce.dirigent.trim()) 
     ? akce.dirigent.trim() 
     : "Jiří Sycha";
@@ -1342,9 +1310,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     }
 
     let eligiblePlayers = (appData.clenove || []).filter(c => {
-      // Dirigent této akce se do sekcí hráčů nepočítá
       if (c.celeJmeno === dirigentJmeno) return false;
-      
       return c.sekce === sec && isMemberEligibleForAkce(c, datumAkce);
     });
 
@@ -1689,7 +1655,6 @@ function renderOmluvenkyList(akceId) {
     return;
   }
 
-  // Seřazení podle sekce a jména
   omluveni.sort((a, b) => {
     const secComp = String(a.sekce || "").localeCompare(String(b.sekce || ""), "cs");
     if (secComp !== 0) return secComp;
@@ -1715,7 +1680,6 @@ function renderOmluvenkyList(akceId) {
 
   container.innerHTML = html;
 }
-
 
 function toggleOrchHistoryEvents(pocet) {
   const optGroup = document.getElementById("orch_history_group");
@@ -1746,7 +1710,6 @@ function onOrchModalAkceChange() {
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   const datumAkce = akce ? akce.datum : "";
 
-  // Okamžitá synchronizace dirigenta v informačním panelu pod mapkou
   const dirigentJmeno = (akce && akce.dirigent && akce.dirigent.trim()) 
     ? akce.dirigent.trim() 
     : "Jiří Sycha";
@@ -2015,7 +1978,6 @@ function closeAndUnlockAkceModal() {
   if (modal) modal.remove();
 }
 
-// FORMULÁŘ PRO AKCI / INFORMACI (VČETNĚ VOLBY CÍLOVÉ SKUPINY)
 function openAkceForm(param = null, isReadOnly = false) {
   let akce = null;
   if (param !== null && typeof param === 'string') {
@@ -2313,15 +2275,12 @@ function toggleAkceFields() {
   const jeOznameni = typ.includes('Oznámení') || typ.includes('Informace');
   const jeZkouska = typ.includes('zkouška') || typ.includes('Zkouška');
   
-  // Zobrazení volby cílové skupiny pro informace
   const rowCil = document.getElementById('row_cilovaSkupina');
   if (rowCil) rowCil.style.display = jeOznameni ? 'block' : 'none';
 
-  // Zobrazení pole pro dirigenta (skryté u informací)
   const rowDirigent = document.getElementById('row_dirigent');
   if (rowDirigent) rowDirigent.style.display = jeOznameni ? 'none' : 'block';
 
-  // Zobrazení pole pro začátek a konec akce (pro všechny akce, skryté u informací)
   const rowCasyHlavni = document.getElementById('row_casy_hlavni');
   if (rowCasyHlavni) rowCasyHlavni.style.display = jeOznameni ? 'none' : 'flex';
 
@@ -2394,7 +2353,8 @@ function submitAkceForm(e, akceId) {
     zacatekGeneralky: typ !== 'Koncert' ? "" : document.getElementById('f_zacatekGeneralky').value,
     damy: typ !== 'Koncert' ? "" : document.getElementById('f_damy').value, 
     pani: typ !== 'Koncert' ? "" : document.getElementById('f_pani').value,
-    poznamka: finalPoznamka
+    poznamka: finalPoznamka,
+    editorJmeno: getAktualniEditor()
   };
   
   runGoogleScript("saveAkce", payload).then(res => {
@@ -2420,7 +2380,7 @@ function submitAkceForm(e, akceId) {
 
 function deleteAkcePrompt(akceId) {
   if (confirm("Opravdu chcete tuto položku nenávratně smazat z tabulky?")) {
-    runGoogleScript("deleteAkce", { id: akceId }).then(res => {
+    runGoogleScript("deleteAkce", { id: akceId, editorJmeno: getAktualniEditor() }).then(res => {
       if (res.success) { 
         closeAndUnlockAkceModal(); 
         appData.akce = (appData.akce || []).filter(a => String(a.id) !== String(akceId));
@@ -2437,6 +2397,7 @@ function archivovatOznameni(akceId) {
     const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
     if (!akce) return;
     akce.typ = 'Informace (Historie)';
+    akce.editorJmeno = getAktualniEditor();
     runGoogleScript("saveAkce", akce).then(res => {
       if (res.success) { 
         localStorage.setItem("bolech_data_cache", JSON.stringify(appData)); 
@@ -2450,6 +2411,7 @@ function obnovitOznameni(akceId) {
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   if (!akce) return;
   akce.typ = 'Informace';
+  akce.editorJmeno = getAktualniEditor();
   runGoogleScript("saveAkce", akce).then(res => {
     if (res.success) { 
       localStorage.setItem("bolech_data_cache", JSON.stringify(appData)); 
@@ -2579,7 +2541,6 @@ function getBroadcastEmails(targetGroup) {
     const isHost = role === 'host';
 
     const aktivni = String(c.aktivni || "").toUpperCase().trim();
-    // Člen je považován za adresáta, pokud je aktivní, host, nebo člen výboru / pomocník výboru
     const isAktivni = aktivni === 'ANO' || aktivni === 'TRUE' || aktivni === '1' || isHost || isCommittee;
     if (!isAktivni) return;
 
@@ -2660,7 +2621,6 @@ function openGuestManager() {
   
   if (!htmlHoste) htmlHoste = "<p style='color:var(--text-muted); font-size:13px;'>Žádní aktivní hosté.</p>";
 
-  // Seřazení členů abecedně podle příjmení a vložení JMÉNA NA PRVNÍ MÍSTO do textu i hodnoty
   const datalistOptions = (appData.clenove || [])
     .filter(c => (c.celeJmeno || c.jmeno))
     .sort((a, b) => {
@@ -2672,7 +2632,6 @@ function openGuestManager() {
       const celeJmeno = (c.celeJmeno || `${c.jmeno || ''} ${c.prijmeni || ''}`).trim();
       const nastrojRole = c.sekce ? ` – ${c.sekce}${c.role ? ` [${c.role}]` : ''}` : '';
       const celyPopis = `${celeJmeno}${nastrojRole}`;
-      // Jméno je nyní v value, label i viditelném textu položky
       return `<option value="${escapeHtml(celeJmeno)}" label="${escapeHtml(celyPopis)}">${escapeHtml(celyPopis)}</option>`;
     })
     .join('');
@@ -2762,11 +2721,9 @@ function openGuestManager() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-// Okamžité automatické předvyplnění sekce a e-mailu při psaní/výběru jména
 function onGuestNameSelect(val) {
   if (!val) return;
 
-  // Pokud mobilní prohlížeč vložil celý text z nabídky (včetně pomlčky a sekce), očistíme ho na samotné jméno
   const cisteJmeno = String(val).split(/[\–\-\(\[]/)[0].trim().toLowerCase();
   
   const c = (appData.clenove || []).find(item => {
@@ -2803,7 +2760,8 @@ function schvalitHosta(rowIdx, jmeno, nastroj, email, btnElem) {
     nastroj: nastroj, 
     email: email, 
     expirace: expDate,
-    editor: user ? user.name : "Admin"
+    editor: user ? user.name : "Admin",
+    editorJmeno: getAktualniEditor()
   })
   .then(res => {
     if (res.success) {
@@ -2835,7 +2793,8 @@ function pridatHostaNaprimo(e) {
     nastroj: document.getElementById('dirGuestInst').value,
     email: document.getElementById('dirGuestEmail').value,
     expirace: document.getElementById('dirGuestExp').value,
-    editor: user ? user.name : "Admin"
+    editor: user ? user.name : "Admin",
+    editorJmeno: getAktualniEditor()
   };
 
   runGoogleScript("approveGuest", payload).then(res => {
@@ -2907,11 +2866,9 @@ function getDirigentProgramy(u = user) {
     (appData.noty || []).map(n => String(n.program || "").trim()).filter(Boolean)
   ));
 
-  // Šéfdirigent a vedení mají přístup ke všem programům
   const jeSef = uRole.includes('dirigent') || uName.includes('sycha') || hasEditRights(uRole);
   if (jeSef) return vsechnyProgramy;
 
-  // Akce, které tento uživatel diriguje
   const dirigovaneAkce = (appData.akce || []).filter(a => {
     const aDir = String(a.dirigent || "").trim().toLowerCase();
     if (aDir && aDir === uName) return true;
@@ -2953,7 +2910,6 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
   const jeExterniHostDirigent = (String(user.role || "").trim().toLowerCase() === "host") && 
                                 (String(user.section || "").trim().toLowerCase() === "dirigent");
 
-  // Vyhodnocení efektivního nástroje / partitury
   let efektivniNastroj = nastrojUzivatele;
   if (efektivniNastroj === "Baskytara") efektivniNastroj = "Kontrabasy";
   if (efektivniNastroj === "Dirigent") efektivniNastroj = "Partitura";
@@ -2966,7 +2922,6 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
       : `Zobrazený part: ${efektivniNastroj}${user.section === 'Baskytara' ? ' (převzato z kontrabasů)' : ''}`;
   }
 
-  // Seznam povolených programů pro partituru / externího hosta
   const dirigovaneProgramy = jeDirigentAktivni ? getDirigentProgramy(user) : [];
 
   let htmlDropdown = '';
@@ -2993,11 +2948,6 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
     let aktivni = String(nota.aktivni || '').toUpperCase().trim();
     if (aktivni !== 'TRUE' && aktivni !== 'ANO' && aktivni !== '1') return false;
 
-    // PRAVIDLO PRO PROGRAMY:
-    // 1. Pokud je to externí hostující dirigent (role Host bez nástroje), vidí jen svůj program.
-    // 2. Pokud kdokoliv (i hráč-dirigent) prohlíží PARTITURU, vidí partitury programů, které diriguje (šéfdirigent vidí vše).
-    // 3. Pokud stálý hráč (např. Vojtěch Čapek) prohlíží SVŮJ NÁSTROJ (housle) nebo jiné hráčské party,
-    //    vidí VŠECHNY AKTUÁLNÍ PROGRAMY na repertoáru!
     if (!hasEditRights(user.role)) {
       if (jeExterniHostDirigent) {
         if (dirigovaneProgramy.length > 0 && !dirigovaneProgramy.includes(String(nota.program || '').trim())) {
@@ -3017,7 +2967,6 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
       return prirazeneSekce.includes('Partitura');
     }
 
-    // Kontrola všech sekcí přiřazených k této notě
     for (const sec of prirazeneSekce) {
       if (sec === efektivniNastroj) return true;
       if (sec === 'Housle' && (efektivniNastroj === '1. Housle' || efektivniNastroj === '2. Housle')) return true;
@@ -3316,7 +3265,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
   try {
     const savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
 
-    // 1. Zjistíme, které složky měl uživatel otevřené a jaké hodnoty byly v polích před překreslením
     const zachovanyStavSlozek = {};
     if (window.stromSlozek && window.stromSlozek.length > 0) {
       window.stromSlozek.forEach((s, idx) => {
@@ -3365,7 +3313,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
 
       slozkyMap[cesta].soubory.push({ ...nota, kratkyNazev: soubor });
 
-      // Pokud ještě nebyl stav v zachovanyStavSlozek, načteme výchozí z databáze
       if (!zachovanyStavSlozek[cesta]) {
         let aktivniHodnota = String(nota.aktivni || '').toUpperCase().trim();
         if (aktivniHodnota === 'ANO' || aktivniHodnota === 'TRUE' || aktivniHodnota === '1') {
@@ -3389,7 +3336,7 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
       </style>
     `;
 
-        window.stromSlozek.forEach((s, index) => {
+    window.stromSlozek.forEach((s, index) => {
       const zobrazenyNazev = escapeHtml(s.cesta).replace(/\//g, '<span style="color:var(--text-muted); margin:0 4px;">❯</span>');
       const checkBg = s.aktivni ? 'var(--success)' : 'transparent';
       const stavTrida = s.aktivni ? 'folder-active' : 'folder-inactive';
@@ -3400,7 +3347,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
 
       html += `
         <details class="card ${stavTrida}"${openAttr} data-cesta="${escapeHtml(s.cesta)}" style="margin-bottom: 8px; margin-left: 0; margin-right: 0; padding: 0; overflow: hidden; width: 100%; border: 1px solid var(--border);">
-          <!-- ČISTÉ ZÁHLAVÍ KARTY: KLIKNUTÍM SE KARTA POUZE OTEVÍRÁ / ZAVÍRÁ -->
           <summary style="padding: 12px 14px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
             <span style="word-break: break-word; line-height: 1.3; font-size: 16px; font-weight: bold; color: var(--text);">
               📁 ${zobrazenyNazev} <small style="font-weight:normal; opacity:0.6;">(${s.soubory.length})</small>
@@ -3411,7 +3357,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
             </div>
           </summary>
           
-          <!-- OVLÁDÁNÍ PROGRAMU A AKTIVITY (UVNITŘ ROZBALENÉ KARTY, MIMO SUMMARY) -->
           <div style="padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center;">
             <input type="text" id="prog_${index}" class="modal-input" placeholder="Název programu..." value="${escapeHtml(s.program)}" style="flex: 1; margin: 0; padding: 10px; font-size: 14px; border-radius: 6px;" oninput="oznacNeulozeneZmeny()">  
 
@@ -3432,7 +3377,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
               const isSelected = window.vybraneNotyKEmailu.some(n => n.odkaz === soub.odkaz);
               const secs = String(soub.sekce || '').split(/[,;/+]/).map(x => x.trim()).filter(Boolean);
 
-              // Možnosti dalších sekcí z partitury
               const dalsiSekceOptions = PARTITURA_SECTIONS
                 .filter(sec => !secs.includes(sec))
                 .map(sec => `<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`)
@@ -3456,7 +3400,6 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
                   </button>
                 </div>
 
-                <!-- Štítky přiřazených sekcí a roletka pro další výběr -->
                 <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px;">
                   <span style="color: var(--text-muted); font-size: 11px;">Part pro:</span>
                   ${secs.map((sName, sIdx) => `
@@ -3490,6 +3433,7 @@ function vykresliAdminNoty(cestaKteraMaBytOtevrena = null) {
     cont.innerHTML = `<p style="color:var(--danger); padding:16px;">Chyba: ${error.message}</p>`;
   }
 }
+
 function ulozitZmenyNot(e) {
   const eventObj = e || window.event;
   if (eventObj && eventObj.preventDefault) eventObj.preventDefault();
@@ -3534,7 +3478,10 @@ function ulozitZmenyNot(e) {
     return;
   }
 
-  runGoogleScript("updateNotyHromadne", { zmeny: zmeny }).then(res => {
+  runGoogleScript("updateNotyHromadne", { 
+    zmeny: zmeny, 
+    editorJmeno: getAktualniEditor() 
+  }).then(res => {
     if (button) {
       button.disabled = false;
       button.innerHTML = "💾 Uložit všechny změny";
@@ -3555,10 +3502,9 @@ function ulozitZmenyNot(e) {
 // AUTOMATICKÁ TICHÁ AKTUALIZACE DAT (PŘI OTEVŘENÉ APLIKACI)
 // =========================================================================
 let posledniAktualizaceCas = Date.now();
-const MIN_INTERVAL_OBNOVENI_MS = 5 * 60 * 1000; // Minimálně 5 minut mezi kontrolami
+const MIN_INTERVAL_OBNOVENI_MS = 5 * 60 * 1000;
 
 async function tichaObnovaDat(vynutit = false) {
-  // Pokud uživatel ještě není přihlášen, neaktualizujeme
   if (!user) return;
 
   const nyni = Date.now();
@@ -3566,7 +3512,6 @@ async function tichaObnovaDat(vynutit = false) {
     return;
   }
 
-  // Ochrana: Pokud má někdo zrovna otevřený formulář akce nebo obsazení, nepřekreslujeme
   if (document.getElementById('akceModal') || document.getElementById('orchestrModal')) {
     return;
   }
@@ -3593,26 +3538,22 @@ async function tichaObnovaDat(vynutit = false) {
   }
 }
 
-// 1. Spuštění při návratu do aplikace (odemknutí telefonu, přepnutí záložky zpět)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     tichaObnovaDat();
   }
 });
 
-// 2. Spuštění při kliknutí/zaostření do okna (v prohlížeči na PC či notebooku)
 window.addEventListener("focus", () => {
   tichaObnovaDat();
 });
 
-// 3. Pravidelná kontrola na pozadí pro ty, kdo mají aplikaci trvale na displeji (každých 10 minut)
 setInterval(() => {
   if (document.visibilityState === "visible") {
     tichaObnovaDat(true);
   }
 }, 10 * 60 * 1000);
-// Aktualizováno
-// Zobrazení tlačítka pouze pro vedení / administrátory
+
 function updateActivityButtonVisibility() {
   const user = window.currentUser || JSON.parse(localStorage.getItem('bolech_auth_member') || '{}');
   const role = (user.role || '').toLowerCase();
@@ -3622,19 +3563,110 @@ function updateActivityButtonVisibility() {
   }
 }
 
-// Otevření a zavření okna historie
+// Propojení tlačítka Aktivita z administrace
 function openActivityModal() {
-  document.getElementById('modalActivityLog').style.display = 'flex';
-  loadActivityLog();
+  openActivityLogModal();
+}
+
+// =========================================================================
+// OKNO HISTORIE AKTIVIT (AUDITNÍ LOG)
+// =========================================================================
+function openActivityLogModal() {
+  const modalHtml = `
+    <div id="activityLogModal" class="modal-overlay" style="z-index:10000; padding:8px;" onclick="if(event.target===this) document.getElementById('activityLogModal').remove()">
+      <div class="modal-box" style="max-width: 600px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; padding: 16px;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
+            <span>📋</span> Protokol aktivit a změn
+          </h3>
+          <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer;" onclick="document.getElementById('activityLogModal').remove()">✕</button>
+        </div>
+
+        <div id="activityLogContent" style="flex:1; overflow-y:auto; padding-right:4px;">
+          <div style="text-align:center; padding:30px; color:var(--text-muted);">
+            <div style="font-size:24px; margin-bottom:8px;">⏳</div>
+            Načítám historii aktivit z tabulky...
+          </div>
+        </div>
+
+        <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px; text-align:right;">
+          <button type="button" class="btn" style="background:var(--border); color:var(--text); width:auto; padding:6px 16px;" onclick="document.getElementById('activityLogModal').remove()">
+            Zavřít
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  runGoogleScript("getActivityLog").then(res => {
+    const container = document.getElementById("activityLogContent");
+    if (!container) return;
+
+    const list = Array.isArray(res) ? res : (res && res.log ? res.log : []);
+
+    if (!list || list.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">Zatím žádné zaznamenané aktivity.</div>`;
+      return;
+    }
+
+    const badgeBarvy = {
+      "Akce": { bg: "rgba(59, 130, 246, 0.12)", color: "#2563eb", border: "rgba(59, 130, 246, 0.25)" },
+      "Hosté": { bg: "rgba(168, 85, 247, 0.12)", color: "#7c3aed", border: "rgba(168, 85, 247, 0.25)" },
+      "Členové": { bg: "rgba(16, 185, 129, 0.12)", color: "#059669", border: "rgba(16, 185, 129, 0.25)" },
+      "Noty": { bg: "rgba(245, 158, 11, 0.12)", color: "#d97706", border: "rgba(245, 158, 11, 0.25)" },
+      "Systém": { bg: "rgba(100, 116, 139, 0.12)", color: "#475569", border: "rgba(100, 116, 139, 0.25)" }
+    };
+
+    let itemsHtml = "";
+    list.forEach(item => {
+      const cas = item.cas || item.timestamp || "";
+      const autor = item.autor || item.user || "Neznámý";
+      const kategorie = item.kategorie || item.category || "Systém";
+      const popis = item.popis || item.details || "";
+      
+      const styl = badgeBarvy[kategorie] || badgeBarvy["Systém"];
+
+      itemsHtml += `
+        <div style="padding: 10px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-weight:700; color:var(--text); font-size:13px;">${escapeHtml(autor)}</span>
+              <span style="background:${styl.bg}; color:${styl.color}; border:1px solid ${styl.border}; padding:1px 6px; border-radius:4px; font-weight:600; font-size:11px;">
+                ${escapeHtml(kategorie)}
+              </span>
+            </div>
+            <span style="color:var(--text-muted); font-size:11px;">${escapeHtml(cas)}</span>
+          </div>
+          <div style="font-size:13px; color:var(--text); line-height:1.35; padding-left: 2px;">
+            ${escapeHtml(popis)}
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = itemsHtml;
+  }).catch(err => {
+    const container = document.getElementById("activityLogContent");
+    if (container) {
+      container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger);">Chyba při načítání aktivit: ${escapeHtml(err.message || err)}</div>`;
+    }
+  });
 }
 
 function closeActivityModal() {
-  document.getElementById('modalActivityLog').style.display = 'none';
+  const modal = document.getElementById('activityLogModal');
+  if (modal) modal.remove();
+  const oldModal = document.getElementById('modalActivityLog');
+  if (oldModal) oldModal.style.display = 'none';
 }
 
-// Načtení dat z tabulky přes Google Apps Script
 async function loadActivityLog() {
   const content = document.getElementById('activityLogContent');
+  if (!content) return;
   content.innerHTML = '<div style="text-align: center; color: #64748b; padding: 24px;">Načítám historii...</div>';
 
   try {
@@ -3681,7 +3713,7 @@ async function loadActivityLog() {
 // =========================================================================
 
 let clenoveFilterQuery = "";
-let clenoveStavFilter = "all"; // all, aktivni, neaktivni
+let clenoveStavFilter = "all";
 
 function openMemberManager() {
   if (!isAdminUser(user)) {
@@ -3696,7 +3728,6 @@ function openMemberManager() {
     <div id="memberManagerModal" class="modal-overlay" style="padding: 4px;" onclick="if(event.target===this) document.getElementById('memberManagerModal').remove()">
       <div class="modal-box" style="max-height: 94vh; max-width: 650px; width: 100%; display: flex; flex-direction: column; padding: 12px 10px;">
         
-        <!-- Hlavička modálu -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <button type="button" style="background:transparent; border:none; font-size:20px; color:var(--text); cursor:pointer; padding:4px;" onclick="document.getElementById('memberManagerModal').remove()">←</button>
@@ -3707,7 +3738,6 @@ function openMemberManager() {
           </button>
         </div>
 
-        <!-- Vyhledávání a rychlý filtr -->
         <div style="margin-bottom: 10px; display:flex; flex-direction:column; gap:6px;">
           <input type="search" id="memberSearchInput" class="modal-input" placeholder="🔍 Hledat jméno, sekci, e-mail..." style="margin:0; font-size:14px; padding:9px 12px;" oninput="onMemberSearchChange(this.value)">
           
@@ -3718,9 +3748,7 @@ function openMemberManager() {
           </div>
         </div>
 
-        <!-- Seznam členů -->
         <div id="membersListContainer" style="overflow-y:auto; flex:1; padding-right:2px; display:flex; flex-direction:column; gap:8px;">
-          <!-- Karty se vykreslují dynamicky -->
         </div>
 
       </div>
@@ -3755,7 +3783,6 @@ function renderMembersList() {
 
   const clenove = [...(appData.clenove || [])];
   
-  // Seřazení podle příjmení
   clenove.sort((a, b) => {
     const pA = a.prijmeni || a.celeJmeno.split(/\s+/).slice(-1)[0] || "";
     const pB = b.prijmeni || b.celeJmeno.split(/\s+/).slice(-1)[0] || "";
@@ -3820,7 +3847,6 @@ function renderMembersList() {
   container.innerHTML = html;
 }
 
-// Dialog úpravy / přidání člena
 function openEditMemberModal(celeJmeno = null) {
   const isEdit = !!celeJmeno;
   const clen = isEdit ? (appData.clenove || []).find(c => c.celeJmeno === celeJmeno) : null;
@@ -3927,7 +3953,7 @@ function submitMemberForm(e, puvodniCeleJmeno) {
     role: role,
     aktivni: aktivni,
     sendPinNow: sendPinNow,
-    editorJmeno: user.name
+    editorJmeno: getAktualniEditor()
   };
 
   runGoogleScript("saveMember", payload).then(res => {
@@ -3937,7 +3963,6 @@ function submitMemberForm(e, puvodniCeleJmeno) {
     if (res.success) {
       document.getElementById("memberEditFormModal").remove();
       
-      // Aktualizujeme lokální mezipaměť členů
       if (!appData.clenove) appData.clenove = [];
       const idx = appData.clenove.findIndex(c => c.celeJmeno === (puvodniCeleJmeno || payload.celeJmeno));
       
@@ -3963,7 +3988,7 @@ function resendPinToMember(celeJmeno, email) {
   }
 
   if (confirm(`Opravdu chcete odeslat e-mail s přihlašovacím PINem členu ${celeJmeno} na adresu ${email}?`)) {
-    runGoogleScript("resendMemberPin", { celeJmeno: celeJmeno, email: email, editorJmeno: user.name }).then(res => {
+    runGoogleScript("resendMemberPin", { celeJmeno: celeJmeno, email: email, editorJmeno: getAktualniEditor() }).then(res => {
       if (res.success) {
         alert(`PIN byl úspěšně odeslán na adresu: ${email}`);
       } else {
@@ -3971,4 +3996,18 @@ function resendPinToMember(celeJmeno, email) {
       }
     });
   }
+}
+
+function getAktualniEditor() {
+  if (typeof user !== 'undefined' && user && (user.name || user.celeJmeno)) {
+    return user.name || user.celeJmeno;
+  }
+  if (typeof currentUser !== 'undefined' && currentUser && (currentUser.name || currentUser.celeJmeno)) {
+    return currentUser.name || currentUser.celeJmeno;
+  }
+  try {
+    const ulozeny = JSON.parse(localStorage.getItem('bolech_auth_member') || localStorage.getItem('user') || '{}');
+    if (ulozeny.name || ulozeny.celeJmeno) return ulozeny.name || ulozeny.celeJmeno;
+  } catch (e) {}
+  return "Vedení";
 }
