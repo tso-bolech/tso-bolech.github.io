@@ -3563,27 +3563,31 @@ function updateActivityButtonVisibility() {
   }
 }
 
-// Propojení tlačítka Aktivita z administrace
+// =========================================================================
+// OKNO HISTORIE AKTIVIT (AUDITNÍ LOG) – OPRAVA KOLIZE ELEMENTŮ
+// =========================================================================
 function openActivityModal() {
   openActivityLogModal();
 }
 
-// =========================================================================
-// OKNO HISTORIE AKTIVIT (AUDITNÍ LOG)
-// =========================================================================
 function openActivityLogModal() {
+  // 1. Pokud již okno existuje v DOMu, odstraníme ho před novým otevřením
+  const staryModal = document.getElementById('activityLogModal');
+  if (staryModal) staryModal.remove();
+
+  // 2. Vytvoříme modal s unikátní třídou pro vnitřní obsah
   const modalHtml = `
-    <div id="activityLogModal" class="modal-overlay" style="z-index:10000; padding:8px;" onclick="if(event.target===this) document.getElementById('activityLogModal').remove()">
+    <div id="activityLogModal" class="modal-overlay" style="z-index:10000; padding:8px;" onclick="if(event.target===this) closeActivityModal()">
       <div class="modal-box" style="max-width: 600px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; padding: 16px;">
         
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:12px;">
           <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
             <span>📋</span> Protokol aktivit a změn
           </h3>
-          <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer;" onclick="document.getElementById('activityLogModal').remove()">✕</button>
+          <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer;" onclick="closeActivityModal()">✕</button>
         </div>
 
-        <div id="activityLogContent" style="flex:1; overflow-y:auto; padding-right:4px;">
+        <div class="activity-log-scroll-area" style="flex:1; overflow-y:auto; padding-right:4px;">
           <div style="text-align:center; padding:30px; color:var(--text-muted);">
             <div style="font-size:24px; margin-bottom:8px;">⏳</div>
             Načítám historii aktivit z tabulky...
@@ -3591,7 +3595,7 @@ function openActivityLogModal() {
         </div>
 
         <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px; text-align:right;">
-          <button type="button" class="btn" style="background:var(--border); color:var(--text); width:auto; padding:6px 16px;" onclick="document.getElementById('activityLogModal').remove()">
+          <button type="button" class="btn" style="background:var(--border); color:var(--text); width:auto; padding:6px 16px;" onclick="closeActivityModal()">
             Zavřít
           </button>
         </div>
@@ -3602,13 +3606,23 @@ function openActivityLogModal() {
 
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 
+  // 3. Odkaz na kontejner získáme přímo z právě vytvořeného okna (vyloučí kolizi s index.html)
+  const currentModal = document.getElementById('activityLogModal');
+  const container = currentModal ? currentModal.querySelector('.activity-log-scroll-area') : null;
+
   runGoogleScript("getActivityLog").then(res => {
-    const container = document.getElementById("activityLogContent");
     if (!container) return;
 
+    // Pokud backend vrátil chybu
+    if (res && res.success === false) {
+      container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger);">Chyba serveru: ${escapeHtml(res.error || 'Neznámá chyba')}</div>`;
+      return;
+    }
+
+    // Bezpečné načtení pole (podporuje čisté pole i obalující objekt { log: [...] })
     const list = Array.isArray(res) ? res : (res && res.log ? res.log : []);
 
-    if (!list || list.length === 0) {
+    if (list.length === 0) {
       container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">Zatím žádné zaznamenané aktivity.</div>`;
       return;
     }
@@ -3650,9 +3664,8 @@ function openActivityLogModal() {
 
     container.innerHTML = itemsHtml;
   }).catch(err => {
-    const container = document.getElementById("activityLogContent");
     if (container) {
-      container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger);">Chyba při načítání aktivit: ${escapeHtml(err.message || err)}</div>`;
+      container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger);">Chyba spojení: ${escapeHtml(err.message || String(err))}</div>`;
     }
   });
 }
