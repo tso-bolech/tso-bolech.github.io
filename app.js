@@ -2632,55 +2632,38 @@ function sendBroadcastViaMailto() {
 }
 
 // =========================================================================
-// SPRÁVA HOSTŮ
+// SPRÁVA HOSTŮ (S NAŠEPTÁVAČEM A OCHRANOU PROTI DUPLICITÁM)
 // =========================================================================
 function openGuestManager() {
   let htmlHoste = "";
-  
-  // Dnešní půlnoc pro přesné porovnání dat
   const dnes = new Date();
   dnes.setHours(0, 0, 0, 0);
 
-  // Pomocná kontrola: Vypršela už platnost účtu?
   const isHostStalePlatny = platnostStr => {
     if (!platnostStr) return true;
-    const str = String(platnostStr).trim();
-    let expDate = null;
-
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      // Formát YYYY-MM-DD (z date picker formuláře)
-      const parts = str.split('T')[0].split('-');
-      expDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    } else if (/^\d{1,2}\.\s*\d{1,2}\.\s*\d{4}/.test(str)) {
-      // Formát D. M. YYYY (z Google Tabulky)
-      const parts = str.split('.');
-      expDate = new Date(parts[2].trim(), parts[1].trim() - 1, parts[0].trim());
-    } else {
-      const parsed = new Date(str);
-      if (!isNaN(parsed.getTime())) {
-        expDate = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-      }
-    }
-
-    // Pokud je datum neplatné nebo je dnes či v budoucnu, účet je stále aktivní
-    return expDate ? expDate >= dnes : true;
+    const expDate = parseDate(platnostStr);
+    return expDate ? (expDate + 86399000) >= dnes.getTime() : true;
   };
 
   if (appData.clenove) {
     appData.clenove.forEach(c => {
       const isHost = String(c.role || "").toLowerCase() === 'host';
-      
-      // Zobrazí se POUZE hosté, kterým ještě nevypršela platnost
       if (isHost && isHostStalePlatny(c.platnost)) {
-         htmlHoste += `<div style="padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px;">
-                        <strong>${escapeHtml(c.celeJmeno)}</strong> (${escapeHtml(c.sekce)})<br>
-                        <span style="color:var(--text-muted); font-size:12px;">⏳ Platí do: ${escapeHtml(c.platnost)}</span>
-                      </div>`;
+        htmlHoste += `
+          <div style="padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px;">
+            <strong>${escapeHtml(c.celeJmeno)}</strong> (${escapeHtml(c.sekce)})<br>
+            <span style="color:var(--text-muted); font-size:12px;">⏳ Platí do: ${escapeHtml(c.platnost)}</span>
+          </div>`;
       }
     });
   }
   
   if (!htmlHoste) htmlHoste = "<p style='color:var(--text-muted); font-size:13px;'>Žádní aktivní hosté.</p>";
+
+  // Příprava datalistu pro našeptávač ze všech členů i bývalých hostů
+  const datalistOptions = (appData.clenove || []).map(c => 
+    `<option value="${escapeHtml(c.celeJmeno)}">${escapeHtml(c.sekce || "")} ${c.role ? `[${escapeHtml(c.role)}]` : ''}</option>`
+  ).join('');
 
   let html = `
     <div id="guestModal" class="modal-overlay">
@@ -2692,6 +2675,7 @@ function openGuestManager() {
           <h3 style="margin:0; font-size:20px;">👥 Správa hostů</h3>
         </div>
         
+        <!-- 1. ČEKAJÍCÍ ŽÁDOSTI -->
         <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Čekající žádosti</h4>
         <div id="pendingRequestsContainer" style="margin-bottom: 24px;">`;
         
@@ -2699,17 +2683,29 @@ function openGuestManager() {
           html += `<p style="color:var(--text-muted); font-size:14px;">Žádné nové žádosti.</p>`;
         } else {
           appData.zadosti.forEach(z => {
+            // Kontrola, zda žadatel už není v evidenci členů
+            const existujici = (appData.clenove || []).find(c => 
+              c.celeJmeno.toLowerCase() === z.jmeno.toLowerCase() || 
+              (z.email && c.email && c.email.toLowerCase() === z.email.toLowerCase())
+            );
+
             html += `
             <div style="border: 1px solid var(--border); padding: 12px; border-radius: 6px; margin-bottom: 12px; background: var(--bg);">
-              <strong>${escapeHtml(z.jmeno)}</strong> (${escapeHtml(z.nastroj)})<br>
-              <span style="font-size:13px; color:var(--text-muted);">E-mail: ${escapeHtml(z.email)} | Tel: ${escapeHtml(z.telefon)}</span>
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+                <strong>${escapeHtml(z.jmeno)}</strong>
+                ${existujici ? `<span style="font-size:11px; background:rgba(59,130,246,0.15); color:var(--primary-light); padding:2px 6px; border-radius:4px; font-weight:700;">Již v evidenci</span>` : ''}
+              </div>
+              <span style="font-size:13px; color:var(--text);">Nástroj: <strong>${escapeHtml(z.nastroj)}</strong></span><br>
+              <span style="font-size:12px; color:var(--text-muted);">E-mail: ${escapeHtml(z.email)} | Tel: ${escapeHtml(z.telefon || "neuveden")}</span>
               
               <div style="margin-top: 12px; display:flex; gap:8px; align-items:flex-end;">
                 <div style="flex:1;">
                   <label style="font-size:12px;">Platnost do:</label>
                   <input type="date" id="exp_${z.rowIdx}" class="modal-input" required>
                 </div>
-                <button type="button" class="btn" style="background:var(--success); padding:10px 14px;" onclick="schvalitHosta(${z.rowIdx}, '${escapeHtml(z.jmeno)}', '${escapeHtml(z.nastroj)}', '${escapeHtml(z.email)}', this)">Schválit a odeslat PIN</button>
+                <button type="button" class="btn" style="background:var(--success); padding:10px 14px;" onclick="schvalitHosta(${z.rowIdx}, '${escapeHtml(z.jmeno)}', '${escapeHtml(z.nastroj)}', '${escapeHtml(z.email)}', this)">
+                  Schválit a odeslat PIN
+                </button>
               </div>
             </div>`;
           });
@@ -2718,41 +2714,33 @@ function openGuestManager() {
   html += `
         </div>
         
+        <!-- 2. PŘÍMÉ POZVÁNÍ HOSTA S NAŠEPTÁVAČEM -->
         <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Přímé pozvání hosta</h4>
         <form onsubmit="pridatHostaNaprimo(event)">
-          <input type="text" id="dirGuestName" required placeholder="Jméno a Příjmení" class="modal-input" style="margin-bottom: 8px;">
+          <datalist id="guestAutoList">${datalistOptions}</datalist>
           
+          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Jméno a příjmení (lze vybrat ze seznamu):</label>
+          <input type="text" id="dirGuestName" list="guestAutoList" required placeholder="např. Petr Rohař..." class="modal-input" style="margin-bottom: 8px;" onchange="onGuestNameSelect(this.value)">
+          
+          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Nástrojová sekce:</label>
           <select id="dirGuestInst" required class="modal-input" style="margin-bottom: 8px;">
             <option value="" disabled selected>Vyberte nástrojovou sekci...</option>
             <option value="Dirigent">🎼 Dirigent (hostující)</option>
-            <option value="1. Housle">1. Housle</option>
-            <option value="2. Housle">2. Housle</option>
-            <option value="Violy">Violy</option>
-            <option value="Violoncella">Violoncella</option>
-            <option value="Kontrabasy">Kontrabasy</option>
-            <option value="Flétny">Flétny</option>
-            <option value="Hoboje">Hoboje</option>
-            <option value="Klarinety / Saxofony">Klarinety / Saxofony</option>
-            <option value="Fagoty">Fagoty</option>
-            <option value="Lesní rohy">Lesní rohy</option>
-            <option value="Trubky">Trubky</option>
-            <option value="Trombóny a Tuba">Trombóny a Tuba</option>
-            <option value="Bicí nástroje">Bicí nástroje</option>
-            <option value="Klávesy">Klávesy</option>
-            <option value="Kytary">Kytary</option>
-            <option value="Zpěv">Zpěv</option>
-            <option value="Hosté">Jiný / Ostatní</option>
+            ${PARTITURA_SECTIONS.map(s => `<option value="${s}">${s}</option>`).join('')}
           </select>
 
+          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">E-mail hosta:</label>
           <input type="email" id="dirGuestEmail" required placeholder="E-mail hosta" class="modal-input" style="margin-bottom: 8px;">
-          <label style="font-size:12px; margin-top:8px; display:block;">Platnost účtu do:</label>
+          
+          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Platnost účtu do:</label>
           <input type="date" id="dirGuestExp" required class="modal-input" style="margin-bottom: 16px;">
           
-          <button type="submit" id="dirGuestBtn" class="btn" style="width:100%; background:var(--primary-light);">Vytvořit hosta a odeslat PIN</button>
+          <button type="submit" id="dirGuestBtn" class="btn" style="width:100%; background:var(--primary-light);">
+            Uložit hosta a odeslat PIN
+          </button>
         </form>
 
         <h4 style="margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Aktivní hosté</h4>
-        
         <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 6px; background: var(--bg);">
           ${htmlHoste}
         </div>
@@ -2763,20 +2751,50 @@ function openGuestManager() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
+// Pomocná funkce: po výběru existujícího jména z našeptávače předvyplní e-mail a sekci
+function onGuestNameSelect(val) {
+  const c = (appData.clenove || []).find(item => item.celeJmeno.toLowerCase() === String(val).toLowerCase().trim());
+  if (c) {
+    if (c.email && !document.getElementById('dirGuestEmail').value) {
+      document.getElementById('dirGuestEmail').value = c.email;
+    }
+    if (c.sekce) {
+      document.getElementById('dirGuestInst').value = c.sekce;
+    }
+  }
+}
+
 function schvalitHosta(rowIdx, jmeno, nastroj, email, btnElem) {
   const expDate = document.getElementById('exp_' + rowIdx).value;
   if (!expDate) { alert("Musíte vybrat datum expirace!"); return; }
   
   btnElem.innerText = "Odesílám..."; btnElem.disabled = true;
   
-  runGoogleScript("approveGuest", { zadostRowIdx: rowIdx, jmeno: jmeno, nastroj: nastroj, email: email, expirace: expDate })
+  runGoogleScript("approveGuest", { 
+    zadostRowIdx: rowIdx, 
+    jmeno: jmeno, 
+    nastroj: nastroj, 
+    email: email, 
+    expirace: expDate,
+    editor: user ? user.name : "Admin"
+  })
   .then(res => {
-    if(res.success) {
-      alert("Účet byl vytvořen a PIN byl odeslán na e-mail: " + email);
+    if (res.success) {
+      if (res.jizSchvaleno) {
+        alert(res.message);
+      } else if (res.jeExistujici) {
+        alert(`Host ${jmeno} již byl v evidenci orchestru. Účet byl prodloužen do ${expDate} s jeho stávajícím PINem a potvrzení bylo odesláno na ${email}.`);
+      } else {
+        alert(`Nový účet byl vytvořen a PIN byl odeslán na e-mail: ${email}`);
+      }
       localStorage.removeItem("bolech_data_cache");
       document.getElementById('guestModal').remove();
       initApp();
-    } else { alert("Chyba: " + res.error); btnElem.innerText = "Schválit a odeslat PIN"; btnElem.disabled = false; }
+    } else { 
+      alert("Chyba: " + res.error); 
+      btnElem.innerText = "Schválit a odeslat PIN"; 
+      btnElem.disabled = false; 
+    }
   });
 }
 
@@ -2789,16 +2807,25 @@ function pridatHostaNaprimo(e) {
     jmeno: document.getElementById('dirGuestName').value,
     nastroj: document.getElementById('dirGuestInst').value,
     email: document.getElementById('dirGuestEmail').value,
-    expirace: document.getElementById('dirGuestExp').value
+    expirace: document.getElementById('dirGuestExp').value,
+    editor: user ? user.name : "Admin"
   };
 
   runGoogleScript("approveGuest", payload).then(res => {
-    if(res.success) {
-      alert("Host byl vytvořen a PIN byl odeslán e-mailem!");
+    if (res.success) {
+      if (res.jeExistujici) {
+        alert(`Host ${payload.jmeno} již v databázi existuje. Byla prodloužena jeho platnost do ${payload.expirace}, byl mu ponechán původní PIN a odeslán e-mail.`);
+      } else {
+        alert("Nový host byl vytvořen a PIN byl odeslán e-mailem!");
+      }
       localStorage.removeItem("bolech_data_cache");
       document.getElementById('guestModal').remove();
       initApp();
-    } else { alert("Chyba: " + res.error); btn.innerText = "Vytvořit hosta a odeslat PIN"; btn.disabled = false; }
+    } else { 
+      alert("Chyba: " + res.error); 
+      btn.innerText = "Uložit hosta a odeslat PIN"; 
+      btn.disabled = false; 
+    }
   });
 }
 
