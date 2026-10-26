@@ -2632,7 +2632,7 @@ function sendBroadcastViaMailto() {
 }
 
 // =========================================================================
-// SPRÁVA HOSTŮ (S NAŠEPTÁVAČEM A OCHRANOU PROTI DUPLICITÁM)
+// SPRÁVA HOSTŮ (S OPRAVENÝM NAŠEPTÁVAČEM JMÉNA A PŘÍJMENÍ)
 // =========================================================================
 function openGuestManager() {
   let htmlHoste = "";
@@ -2660,10 +2660,22 @@ function openGuestManager() {
   
   if (!htmlHoste) htmlHoste = "<p style='color:var(--text-muted); font-size:13px;'>Žádní aktivní hosté.</p>";
 
-  // Příprava datalistu pro našeptávač ze všech členů i bývalých hostů
-  const datalistOptions = (appData.clenove || []).map(c => 
-    `<option value="${escapeHtml(c.celeJmeno)}">${escapeHtml(c.sekce || "")} ${c.role ? `[${escapeHtml(c.role)}]` : ''}</option>`
-  ).join('');
+  // Seřazení členů abecedně podle příjmení a vložení JMÉNA NA PRVNÍ MÍSTO do textu i hodnoty
+  const datalistOptions = (appData.clenove || [])
+    .filter(c => (c.celeJmeno || c.jmeno))
+    .sort((a, b) => {
+      const pA = a.prijmeni || (a.celeJmeno || a.jmeno || "").split(/\s+/).slice(-1)[0] || "";
+      const pB = b.prijmeni || (b.celeJmeno || b.jmeno || "").split(/\s+/).slice(-1)[0] || "";
+      return pA.localeCompare(pB, "cs");
+    })
+    .map(c => {
+      const celeJmeno = (c.celeJmeno || `${c.jmeno || ''} ${c.prijmeni || ''}`).trim();
+      const nastrojRole = c.sekce ? ` – ${c.sekce}${c.role ? ` [${c.role}]` : ''}` : '';
+      const celyPopis = `${celeJmeno}${nastrojRole}`;
+      // Jméno je nyní v value, label i viditelném textu položky
+      return `<option value="${escapeHtml(celeJmeno)}" label="${escapeHtml(celyPopis)}">${escapeHtml(celyPopis)}</option>`;
+    })
+    .join('');
 
   let html = `
     <div id="guestModal" class="modal-overlay">
@@ -2683,7 +2695,6 @@ function openGuestManager() {
           html += `<p style="color:var(--text-muted); font-size:14px;">Žádné nové žádosti.</p>`;
         } else {
           appData.zadosti.forEach(z => {
-            // Kontrola, zda žadatel už není v evidenci členů
             const existujici = (appData.clenove || []).find(c => 
               c.celeJmeno.toLowerCase() === z.jmeno.toLowerCase() || 
               (z.email && c.email && c.email.toLowerCase() === z.email.toLowerCase())
@@ -2714,13 +2725,13 @@ function openGuestManager() {
   html += `
         </div>
         
-        <!-- 2. PŘÍMÉ POZVÁNÍ HOSTA S NAŠEPTÁVAČEM -->
+        <!-- 2. PŘÍMÉ POZVÁNÍ HOSTA S FUNKČNÍM NAŠEPTÁVAČEM -->
         <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom:4px;">Přímé pozvání hosta</h4>
         <form onsubmit="pridatHostaNaprimo(event)">
-          <datalist id="guestAutoList">${datalistOptions}</datalist>
           
-          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Jméno a příjmení (lze vybrat ze seznamu):</label>
-          <input type="text" id="dirGuestName" list="guestAutoList" required placeholder="např. Petr Rohař..." class="modal-input" style="margin-bottom: 8px;" onchange="onGuestNameSelect(this.value)">
+          <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Jméno a příjmení (začněte psát pro výběr):</label>
+          <input type="text" id="dirGuestName" list="guestAutoList" required placeholder="např. Rostislav Janda..." class="modal-input" style="margin-bottom: 8px;" autocomplete="off" oninput="onGuestNameSelect(this.value)" onchange="onGuestNameSelect(this.value)">
+          <datalist id="guestAutoList">${datalistOptions}</datalist>
           
           <label style="font-size:12px; font-weight:600; margin-bottom:2px; display:block;">Nástrojová sekce:</label>
           <select id="dirGuestInst" required class="modal-input" style="margin-bottom: 8px;">
@@ -2751,15 +2762,31 @@ function openGuestManager() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-// Pomocná funkce: po výběru existujícího jména z našeptávače předvyplní e-mail a sekci
+// Okamžité automatické předvyplnění sekce a e-mailu při psaní/výběru jména
 function onGuestNameSelect(val) {
-  const c = (appData.clenove || []).find(item => item.celeJmeno.toLowerCase() === String(val).toLowerCase().trim());
+  if (!val) return;
+
+  // Pokud mobilní prohlížeč vložil celý text z nabídky (včetně pomlčky a sekce), očistíme ho na samotné jméno
+  const cisteJmeno = String(val).split(/[\–\-\(\[]/)[0].trim().toLowerCase();
+  
+  const c = (appData.clenove || []).find(item => {
+    const full = (item.celeJmeno || `${item.jmeno || ''} ${item.prijmeni || ''}`).trim().toLowerCase();
+    return full === cisteJmeno || full === String(val).trim().toLowerCase();
+  });
+
   if (c) {
-    if (c.email && !document.getElementById('dirGuestEmail').value) {
-      document.getElementById('dirGuestEmail').value = c.email;
+    const spravneJmeno = (c.celeJmeno || `${c.jmeno || ''} ${c.prijmeni || ''}`).trim();
+    const nameInput = document.getElementById('dirGuestName');
+    if (nameInput && nameInput.value !== spravneJmeno) {
+      nameInput.value = spravneJmeno;
     }
-    if (c.sekce) {
-      document.getElementById('dirGuestInst').value = c.sekce;
+    const emailInput = document.getElementById('dirGuestEmail');
+    if (emailInput && c.email) {
+      emailInput.value = c.email;
+    }
+    const instSelect = document.getElementById('dirGuestInst');
+    if (instSelect && c.sekce) {
+      instSelect.value = c.sekce;
     }
   }
 }
