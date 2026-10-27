@@ -1222,13 +1222,42 @@ function toggleRoster(id) {
   else { content.style.display = 'block'; arrow.innerText = '▲'; }
 }
 
+// =========================================================================
+// INTERAKTIVNÍ PÓDIUM ORCHESTRU (S PŘEPÍNAČI PRO EDITORY)
+// =========================================================================
+
+function onStageFilterToggle(prefix) {
+  if (prefix === "manage") {
+    refreshStagePreviewFromForm();
+  }
+}
+
 function getOrchestraSvgHtml(prefix = "stage") {
   return `
   <div class="stage-wrapper">
     <div class="stage-header-info">
-      <span>Obsazení přihlášených</span>
+      <span>Obsazení pódia</span>
       <span class="stage-count-badge" id="${prefix}-total-count">0 na pódiu</span>
     </div>
+
+    ${prefix === "manage" ? `
+      <!-- Filtrovací přepínače dostupné pouze pro editory -->
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-end; margin-bottom:8px; padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-size:12px;">
+        <span style="font-weight:700; color:var(--text-muted); margin-right:auto;">Zobrazit na pódiu:</span>
+        <label style="display:inline-flex; align-items:center; gap:4px; cursor:default; color:var(--text); font-weight:600;">
+          <input type="checkbox" id="${prefix}_toggle_potvrzeni" checked disabled style="accent-color:var(--success);">
+          <span>✓ Potvrzení</span>
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:#d97706; font-weight:700;">
+          <input type="checkbox" id="${prefix}_toggle_nepotvrzeni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#d97706; transform:scale(1.15);">
+          <span>⏳ Nepotvrzení</span>
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--danger); font-weight:700;">
+          <input type="checkbox" id="${prefix}_toggle_omluveni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:var(--danger); transform:scale(1.15);">
+          <span>✕ Omluvení</span>
+        </label>
+      </div>
+    ` : ''}
 
     <svg viewBox="0 0 660 375" id="${prefix}-svg" style="width:100%; height:auto; display:block; user-select:none;">
       <rect x="190" y="4" width="280" height="46" rx="8" fill="var(--sec-bg)"/>
@@ -1258,7 +1287,7 @@ function getOrchestraSvgHtml(prefix = "stage") {
         👆 Klepněte na hráče nebo dirigenta pro detail
       </div>
       <div class="detail-status" style="color:var(--text-muted); font-size:0.8rem;">
-        Zobrazují se pouze ti, kteří potvrdili účast
+        Zobrazují se potvrzení hráči
       </div>
     </div>
   </div>`;
@@ -1275,6 +1304,10 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   const limits = Object.keys(cfgLimits).length > 0 ? cfgLimits : (savedCfg.limits || {});
   const activeRoster = cfgRoster !== null ? cfgRoster : (savedCfg.roster || {});
 
+  // Zjištění stavu přepínačů pro editory
+  const showNepotvrzeni = !!(document.getElementById(`${prefix}_toggle_nepotvrzeni`)?.checked);
+  const showOmluveni = !!(document.getElementById(`${prefix}_toggle_omluveni`)?.checked);
+
   const dynamicGroup = document.getElementById(`${prefix}-dynamic-spots`);
   const dynamicLabelsGroup = document.getElementById(`${prefix}-dynamic-labels`);
   if (!dynamicGroup) return;
@@ -1282,11 +1315,20 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   if (dynamicLabelsGroup) dynamicLabelsGroup.innerHTML = "";
 
   let celkemHraje = 0;
+  let countPotvrzeno = 0;
+  let countNepotvrzeno = 0;
+  let countOmluveno = 0;
 
   const dirigentJmeno = (akce && akce.dirigent && akce.dirigent.trim()) 
     ? akce.dirigent.trim() 
     : "Jiří Sycha";
-  const dirigentPotvrdil = ucastAkce.some(u => u.stav === "Ano" && u.jmeno === dirigentJmeno);
+  const ucastDir = ucastAkce.find(u => u.jmeno === dirigentJmeno);
+  let dirStav = "Ceka";
+  let dirDuvod = "";
+  if (ucastDir) {
+    dirStav = (ucastDir.stav === "Ano") ? "Ano" : ((ucastDir.stav === "Ne") ? "Ne" : "Ceka");
+    dirDuvod = ucastDir.duvod || "";
+  }
 
   const attendingBySec = {};
 
@@ -1302,8 +1344,16 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       const chosenBass = (activeRoster["Baskytara"] && activeRoster["Baskytara"][0]) || "";
       if (chosenBass) {
         const u = ucastAkce.find(item => item.jmeno === chosenBass);
-        if (u && u.stav === "Ano") {
-          attendingBySec["Baskytara"] = [{ celeJmeno: chosenBass, sekce: "Baskytara" }];
+        let stav = "Ceka";
+        let duvod = "";
+        if (u) {
+          stav = (u.stav === "Ano") ? "Ano" : ((u.stav === "Ne") ? "Ne" : "Ceka");
+          duvod = u.duvod || "";
+        }
+        if (stav === "Ano" || (stav === "Ceka" && showNepotvrzeni) || (stav === "Ne" && showOmluveni)) {
+          attendingBySec["Baskytara"] = [{ celeJmeno: chosenBass, sekce: "Baskytara", stav: stav, duvod: duvod }];
+        } else {
+          attendingBySec["Baskytara"] = [];
         }
       }
       return;
@@ -1321,36 +1371,117 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       chosenPlayers = [...eligiblePlayers];
     }
 
-    if (sec === "1. Housle" && kmName) {
-      chosenPlayers.sort((a, b) => (a.celeJmeno === kmName ? -1 : b.celeJmeno === kmName ? 1 : 0));
-    }
-
-    const attending = chosenPlayers.filter(p => {
+    // Přiřazení reálného stavu docházky ke každému hráči
+    const playersWithStatus = chosenPlayers.map(p => {
       const u = ucastAkce.find(item => item.jmeno === p.celeJmeno);
-      return u && u.stav === "Ano";
+      let stav = "Ceka";
+      let duvod = "";
+      if (u) {
+        stav = (u.stav === "Ano") ? "Ano" : ((u.stav === "Ne") ? "Ne" : "Ceka");
+        duvod = u.duvod || "";
+      }
+      return {
+        ...p,
+        stav: stav,
+        duvod: duvod
+      };
     });
 
-    attendingBySec[sec] = attending.slice(0, capacity);
+    // Filtrace podle aktivních přepínačů
+    let filtered = playersWithStatus.filter(p => {
+      if (p.stav === "Ano") return true;
+      if (p.stav === "Ceka" && showNepotvrzeni) return true;
+      if (p.stav === "Ne" && showOmluveni) return true;
+      return false;
+    });
+
+    // Řazení na židlích: Koncertní mistr první, pak potvrzení (Ano), čekající (Ceka) a nakonec omluvení (Ne)
+    filtered.sort((a, b) => {
+      const isKmA = (sec === "1. Housle" && a.celeJmeno === kmName);
+      const isKmB = (sec === "1. Housle" && b.celeJmeno === kmName);
+      if (isKmA && !isKmB) return -1;
+      if (!isKmA && isKmB) return 1;
+
+      const orderMap = { "Ano": 0, "Ceka": 1, "Ne": 2 };
+      const orderA = orderMap[a.stav] !== undefined ? orderMap[a.stav] : 1;
+      const orderB = orderMap[b.stav] !== undefined ? orderMap[b.stav] : 1;
+      if (orderA !== orderB) return orderA - orderB;
+
+      return a.celeJmeno.localeCompare(b.celeJmeno, "cs");
+    });
+
+    // Pokud filtry nejsou aktivní, omezíme zobrazení na stanovenou kapacitu pódia
+    if (!showNepotvrzeni && !showOmluveni) {
+      attendingBySec[sec] = filtered.slice(0, capacity);
+    } else {
+      attendingBySec[sec] = filtered;
+    }
   });
 
   function renderHexSpot(x, y, p, isKm, secName, isDir = false) {
     celkemHraje++;
     const spot = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    spot.setAttribute("class", `hex-spot ${isKm ? 'is-km' : ''} ${isDir ? 'is-dirigent' : ''}`);
+
+    const stav = p.stav || "Ano";
+    let statusClass = "is-confirmed";
+    if (stav === "Ceka") statusClass = "is-nepotvrzen";
+    if (stav === "Ne") statusClass = "is-omluven";
+
+    spot.setAttribute("class", `hex-spot ${statusClass} ${isKm ? 'is-km' : ''} ${isDir ? 'is-dirigent' : ''}`);
 
     const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
     polygon.setAttribute("points", getHexPoints(x, y, 19.5));
-    spot.appendChild(polygon);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", x);
     label.setAttribute("y", y);
     label.textContent = isDir ? "DIR" : getPlayerDisplayLabel(p.celeJmeno, isKm);
+
+    // Vizuální odlišení dlaždic podle stavu docházky
+    if (isDir) {
+      polygon.setAttribute("fill", "rgba(245, 158, 11, 0.2)");
+      polygon.setAttribute("stroke", "#f59e0b");
+      polygon.setAttribute("stroke-width", "2");
+      label.setAttribute("fill", "#d97706");
+      label.setAttribute("font-weight", "bold");
+    } else if (stav === "Ceka") {
+      countNepotvrzeno++;
+      polygon.setAttribute("fill", "rgba(245, 158, 11, 0.16)");
+      polygon.setAttribute("stroke", "#f59e0b");
+      polygon.setAttribute("stroke-width", "1.8");
+      polygon.setAttribute("stroke-dasharray", "3,2");
+      label.setAttribute("fill", "#d97706");
+      label.setAttribute("font-weight", "bold");
+    } else if (stav === "Ne") {
+      countOmluveno++;
+      polygon.setAttribute("fill", "rgba(239, 68, 68, 0.16)");
+      polygon.setAttribute("stroke", "#ef4444");
+      polygon.setAttribute("stroke-width", "1.8");
+      polygon.setAttribute("stroke-dasharray", "2,2");
+      label.setAttribute("fill", "#dc2626");
+      label.setAttribute("font-weight", "bold");
+    } else {
+      countPotvrzeno++;
+    }
+
+    spot.appendChild(polygon);
     spot.appendChild(label);
 
     const playerLabel = p.celeJmeno + (isKm ? " 🎻 (Koncertní mistr)" : "");
-    const statusText = isDir ? "🎼 Dirigent" : secName;
-    const statusColor = isDir ? "#d97706" : "var(--primary-light)";
+    let statusText = `${secName} • ✓ Potvrzena účast`;
+    let statusColor = "var(--success)";
+
+    if (isDir) {
+      statusText = `🎼 Dirigent ${dirStav === "Ano" ? "(potvrzeno)" : (dirStav === "Ne" ? "(omluven)" : "(čeká se)")}`;
+      statusColor = "#d97706";
+    } else if (stav === "Ceka") {
+      statusText = `${secName} • ⏳ Čeká se na vyjádření`;
+      statusColor = "#d97706";
+    } else if (stav === "Ne") {
+      const duvodText = (p.duvod && p.duvod.trim()) ? `: ${escapeHtml(p.duvod.trim())}` : " (důvod neuveden)";
+      statusText = `${secName} • ✕ Omluven/a${duvodText}`;
+      statusColor = "var(--danger)";
+    }
 
     spot.onclick = () => {
       document.querySelectorAll(`#${prefix}-svg .hex-spot`).forEach(el => el.classList.remove("is-selected"));
@@ -1372,11 +1503,12 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     dynamicLabelsGroup.appendChild(l);
   }
 
+  // Vykreslení dirigenta
   if (dirigentJmeno) {
-    const dirSpot = renderHexSpot(330, 325, { celeJmeno: dirigentJmeno }, false, "Dirigent", true);
+    const dirSpot = renderHexSpot(330, 325, { celeJmeno: dirigentJmeno, stav: dirStav, duvod: dirDuvod }, false, "Dirigent", true);
     if (dirSpot) {
       dirSpot.classList.add("is-selected");
-      showPlayerDetailBox(prefix, dirigentJmeno, "🎼 Dirigent", "#d97706");
+      showPlayerDetailBox(prefix, dirigentJmeno, `🎼 Dirigent ${dirStav === "Ano" ? "(potvrzeno)" : ""}`, "#d97706");
     }
   } else {
     const detailBox = document.getElementById(`${prefix}-detail-box`);
@@ -1389,6 +1521,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     }
   }
 
+  // Vykreslení smyčců
   ["1. Housle", "2. Housle", "Violy", "Violoncella"].forEach(sec => {
     const list = attendingBySec[sec] || [];
     const cfg = ORCHESTRA_LAYOUT_CFG[sec];
@@ -1407,6 +1540,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     });
   });
 
+  // Vykreslení kontrabasů a baskytary
   const cbList = attendingBySec["Kontrabasy"] || [];
   const bassList = attendingBySec["Baskytara"] || [];
   const hasBass = bassList.length > 0;
@@ -1424,6 +1558,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     renderHexSpot(bassX, 218, bassList[0], false, "Baskytara");
   }
 
+  // Vykreslení dřevěných dechů a kláves
   const baseWoodwinds = [
     { sec: "Flétny", label: "Flétny" },
     { sec: "Hoboje", label: "Hoboje" },
@@ -1452,6 +1587,7 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     });
   });
 
+  // Vykreslení žesťů
   const hornList = attendingBySec["Lesní rohy"] || [];
   hornList.forEach((p, idx) => {
     const offset = (idx - (hornList.length - 1) / 2) * 36;
@@ -1470,15 +1606,24 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     renderHexSpot(540 + offset, 88, p, false, "Trombóny / Tuba");
   });
 
+  // Vykreslení bicích
   const biciList = attendingBySec["Bicí nástroje"] || [];
   biciList.forEach((p, idx) => {
     const offset = (idx - (biciList.length - 1) / 2) * 38;
     renderHexSpot(330 + offset, 38, p, false, "Bicí nástroje");
   });
 
+  // Aktualizace odznaku s počtem hráčů
   const countBadge = document.getElementById(`${prefix}-total-count`);
   if (countBadge) {
-    countBadge.textContent = `${celkemHraje} na pódiu`;
+    if (showNepotvrzeni || showOmluveni) {
+      let parts = [`${countPotvrzeno} ✓`];
+      if (showNepotvrzeni) parts.push(`${countNepotvrzeno} ⏳`);
+      if (showOmluveni) parts.push(`${countOmluveno} ✕`);
+      countBadge.textContent = `${celkemHraje} zobrazeno (${parts.join(' / ')})`;
+    } else {
+      countBadge.textContent = `${countPotvrzeno} na pódiu`;
+    }
   }
 }
 
