@@ -25,8 +25,26 @@
       <h1 style="margin-bottom:12px; color:var(--text); font-size: 26px;">Vítejte</h1>
       <p style="margin-bottom:24px; color:var(--text-muted);">Zadejte své jméno nebo e-mail pro vstup do portálu orchestru.</p>
       <form onsubmit="handleLoginSubmit(event)">
-        <input type="text" id="loginQuery" required placeholder="Jméno nebo E-mail" class="modal-input" style="margin-bottom: 12px;">
-        <input type="password" id="loginPin" required placeholder="Váš PIN kód" class="modal-input" style="margin-bottom: 16px;">
+        <input 
+            type="text" 
+            id="loginQuery" 
+            placeholder="Jméno a příjmení nebo e-mail" 
+            required 
+            autocomplete="username" 
+            autocorrect="off" 
+            autocapitalize="words" 
+            spellcheck="false" 
+            class="modal-input">
+        <input 
+            type="password" 
+            id="loginPin" 
+            placeholder="Váš PIN" 
+            required 
+            inputmode="numeric" 
+            pattern="[0-9]*" 
+            maxlength="8" 
+            autocomplete="one-time-code" 
+            class="modal-input">
         <button type="submit" id="loginBtn" class="btn">Vstoupit</button>
       </form>
       <button type="button" class="btn" style="background: transparent; border: 1px solid var(--border); color: var(--text); margin-top: 16px;" onclick="document.getElementById('loginFormCard').style.display='none'; document.getElementById('guestRequestCard').style.display='block';">
