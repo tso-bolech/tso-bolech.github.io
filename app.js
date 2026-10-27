@@ -1223,7 +1223,7 @@ function toggleRoster(id) {
 }
 
 // =========================================================================
-// INTERAKTIVNÍ PÓDIUM ORCHESTRU (S PŘEPÍNAČI PRO EDITORY)
+// INTERAKTIVNÍ PÓDIUM ORCHESTRU (S BAREVNÝM ODLIŠENÍM STAVŮ)
 // =========================================================================
 
 function onStageFilterToggle(prefix) {
@@ -1234,6 +1234,72 @@ function onStageFilterToggle(prefix) {
 
 function getOrchestraSvgHtml(prefix = "stage") {
   return `
+  <style>
+    /* PŘÍMÉ BAREVNÉ STYLY PRO DLAŽDICE NA PÓDIU */
+    .hex-spot polygon {
+      transition: fill 0.2s ease, stroke 0.2s ease;
+    }
+    
+    /* 1. Potvrzená účast (Zelená) */
+    .hex-spot.is-confirmed polygon {
+      fill: rgba(16, 185, 129, 0.18) !important;
+      stroke: #10b981 !important;
+      stroke-width: 1.6px !important;
+      stroke-dasharray: none !important;
+    }
+    .hex-spot.is-confirmed text {
+      fill: var(--text) !important;
+      font-weight: 600 !important;
+    }
+
+    /* 2. Čeká se na vyjádření (Oranžová přerušovaná) */
+    .hex-spot.is-nepotvrzen polygon {
+      fill: rgba(245, 158, 11, 0.22) !important;
+      stroke: #f59e0b !important;
+      stroke-width: 1.8px !important;
+      stroke-dasharray: 4, 2 !important;
+    }
+    .hex-spot.is-nepotvrzen text {
+      fill: #d97706 !important;
+      font-weight: 700 !important;
+    }
+
+    /* 3. Omluvení hráči (Červená tečkovaná) */
+    .hex-spot.is-omluven polygon {
+      fill: rgba(239, 68, 68, 0.22) !important;
+      stroke: #ef4444 !important;
+      stroke-width: 1.8px !important;
+      stroke-dasharray: 2, 2 !important;
+    }
+    .hex-spot.is-omluven text {
+      fill: #dc2626 !important;
+      font-weight: 700 !important;
+    }
+
+    /* Koncertní mistr a Dirigent */
+    .hex-spot.is-km polygon {
+      stroke: #f59e0b !important;
+      stroke-width: 2.4px !important;
+    }
+    .hex-spot.is-dirigent polygon {
+      fill: rgba(245, 158, 11, 0.25) !important;
+      stroke: #f59e0b !important;
+      stroke-width: 2.4px !important;
+      stroke-dasharray: none !important;
+    }
+    .hex-spot.is-dirigent text {
+      fill: #d97706 !important;
+      font-weight: 800 !important;
+    }
+
+    /* Vybraná židle po klepnutí */
+    .hex-spot.is-selected polygon {
+      stroke: #2563eb !important;
+      stroke-width: 2.8px !important;
+      filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.6)) !important;
+    }
+  </style>
+
   <div class="stage-wrapper">
     <div class="stage-header-info">
       <span>Obsazení pódia</span>
@@ -1241,20 +1307,26 @@ function getOrchestraSvgHtml(prefix = "stage") {
     </div>
 
     ${prefix === "manage" ? `
-      <!-- Filtrovací přepínače dostupné pouze pro editory -->
+      <!-- Filtrovací přepínače s barevnými odznáčky -->
       <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-end; margin-bottom:8px; padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-size:12px;">
         <span style="font-weight:700; color:var(--text-muted); margin-right:auto;">Zobrazit na pódiu:</span>
-        <label style="display:inline-flex; align-items:center; gap:4px; cursor:default; color:var(--text); font-weight:600;">
-          <input type="checkbox" id="${prefix}_toggle_potvrzeni" checked disabled style="accent-color:var(--success);">
-          <span>✓ Potvrzení</span>
+        
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:default; color:var(--text); font-weight:700;">
+          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(16,185,129,0.3); border:1.5px solid #10b981;"></span>
+          <input type="checkbox" id="${prefix}_toggle_potvrzeni" checked disabled style="display:none;">
+          <span>Potvrzení</span>
         </label>
-        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:#d97706; font-weight:700;">
-          <input type="checkbox" id="${prefix}_toggle_nepotvrzeni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#d97706; transform:scale(1.15);">
-          <span>⏳ Nepotvrzení</span>
+
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:#d97706; font-weight:700;">
+          <input type="checkbox" id="${prefix}_toggle_nepotvrzeni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#f59e0b; transform:scale(1.15);">
+          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(245,158,11,0.3); border:1.5px dashed #f59e0b;"></span>
+          <span>Nepotvrzení</span>
         </label>
-        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--danger); font-weight:700;">
-          <input type="checkbox" id="${prefix}_toggle_omluveni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:var(--danger); transform:scale(1.15);">
-          <span>✕ Omluvení</span>
+
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:var(--danger); font-weight:700;">
+          <input type="checkbox" id="${prefix}_toggle_omluveni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#ef4444; transform:scale(1.15);">
+          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(239,68,68,0.3); border:1.5px dotted #ef4444;"></span>
+          <span>Omluvení</span>
         </label>
       </div>
     ` : ''}
@@ -1304,7 +1376,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   const limits = Object.keys(cfgLimits).length > 0 ? cfgLimits : (savedCfg.limits || {});
   const activeRoster = cfgRoster !== null ? cfgRoster : (savedCfg.roster || {});
 
-  // Zjištění stavu přepínačů pro editory
   const showNepotvrzeni = !!(document.getElementById(`${prefix}_toggle_nepotvrzeni`)?.checked);
   const showOmluveni = !!(document.getElementById(`${prefix}_toggle_omluveni`)?.checked);
 
@@ -1371,7 +1442,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       chosenPlayers = [...eligiblePlayers];
     }
 
-    // Přiřazení reálného stavu docházky ke každému hráči
     const playersWithStatus = chosenPlayers.map(p => {
       const u = ucastAkce.find(item => item.jmeno === p.celeJmeno);
       let stav = "Ceka";
@@ -1387,7 +1457,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       };
     });
 
-    // Filtrace podle aktivních přepínačů
     let filtered = playersWithStatus.filter(p => {
       if (p.stav === "Ano") return true;
       if (p.stav === "Ceka" && showNepotvrzeni) return true;
@@ -1395,7 +1464,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       return false;
     });
 
-    // Řazení na židlích: Koncertní mistr první, pak potvrzení (Ano), čekající (Ceka) a nakonec omluvení (Ne)
     filtered.sort((a, b) => {
       const isKmA = (sec === "1. Housle" && a.celeJmeno === kmName);
       const isKmB = (sec === "1. Housle" && b.celeJmeno === kmName);
@@ -1410,7 +1478,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       return a.celeJmeno.localeCompare(b.celeJmeno, "cs");
     });
 
-    // Pokud filtry nejsou aktivní, omezíme zobrazení na stanovenou kapacitu pódia
     if (!showNepotvrzeni && !showOmluveni) {
       attendingBySec[sec] = filtered.slice(0, capacity);
     } else {
@@ -1437,31 +1504,36 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     label.setAttribute("y", y);
     label.textContent = isDir ? "DIR" : getPlayerDisplayLabel(p.celeJmeno, isKm);
 
-    // Vizuální odlišení dlaždic podle stavu docházky
+    // Dvojitá pojistka: nastavíme inline styly přímo do elementu s !important
     if (isDir) {
-      polygon.setAttribute("fill", "rgba(245, 158, 11, 0.2)");
-      polygon.setAttribute("stroke", "#f59e0b");
-      polygon.setAttribute("stroke-width", "2");
-      label.setAttribute("fill", "#d97706");
-      label.setAttribute("font-weight", "bold");
+      polygon.style.setProperty("fill", "rgba(245, 158, 11, 0.25)", "important");
+      polygon.style.setProperty("stroke", "#f59e0b", "important");
+      polygon.style.setProperty("stroke-width", "2.2px", "important");
+      label.style.setProperty("fill", "#d97706", "important");
+      label.style.setProperty("font-weight", "800", "important");
     } else if (stav === "Ceka") {
       countNepotvrzeno++;
-      polygon.setAttribute("fill", "rgba(245, 158, 11, 0.16)");
-      polygon.setAttribute("stroke", "#f59e0b");
-      polygon.setAttribute("stroke-width", "1.8");
-      polygon.setAttribute("stroke-dasharray", "3,2");
-      label.setAttribute("fill", "#d97706");
-      label.setAttribute("font-weight", "bold");
+      polygon.style.setProperty("fill", "rgba(245, 158, 11, 0.22)", "important");
+      polygon.style.setProperty("stroke", "#f59e0b", "important");
+      polygon.style.setProperty("stroke-width", "1.8px", "important");
+      polygon.style.setProperty("stroke-dasharray", "4,2", "important");
+      label.style.setProperty("fill", "#d97706", "important");
+      label.style.setProperty("font-weight", "bold", "important");
     } else if (stav === "Ne") {
       countOmluveno++;
-      polygon.setAttribute("fill", "rgba(239, 68, 68, 0.16)");
-      polygon.setAttribute("stroke", "#ef4444");
-      polygon.setAttribute("stroke-width", "1.8");
-      polygon.setAttribute("stroke-dasharray", "2,2");
-      label.setAttribute("fill", "#dc2626");
-      label.setAttribute("font-weight", "bold");
+      polygon.style.setProperty("fill", "rgba(239, 68, 68, 0.22)", "important");
+      polygon.style.setProperty("stroke", "#ef4444", "important");
+      polygon.style.setProperty("stroke-width", "1.8px", "important");
+      polygon.style.setProperty("stroke-dasharray", "2,2", "important");
+      label.style.setProperty("fill", "#dc2626", "important");
+      label.style.setProperty("font-weight", "bold", "important");
     } else {
       countPotvrzeno++;
+      polygon.style.setProperty("fill", "rgba(16, 185, 129, 0.18)", "important");
+      polygon.style.setProperty("stroke", isKm ? "#f59e0b" : "#10b981", "important");
+      polygon.style.setProperty("stroke-width", isKm ? "2.4px" : "1.6px", "important");
+      label.style.setProperty("fill", "var(--text)", "important");
+      label.style.setProperty("font-weight", isKm ? "bold" : "600", "important");
     }
 
     spot.appendChild(polygon);
@@ -1503,7 +1575,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     dynamicLabelsGroup.appendChild(l);
   }
 
-  // Vykreslení dirigenta
   if (dirigentJmeno) {
     const dirSpot = renderHexSpot(330, 325, { celeJmeno: dirigentJmeno, stav: dirStav, duvod: dirDuvod }, false, "Dirigent", true);
     if (dirSpot) {
@@ -1521,7 +1592,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     }
   }
 
-  // Vykreslení smyčců
   ["1. Housle", "2. Housle", "Violy", "Violoncella"].forEach(sec => {
     const list = attendingBySec[sec] || [];
     const cfg = ORCHESTRA_LAYOUT_CFG[sec];
@@ -1540,7 +1610,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     });
   });
 
-  // Vykreslení kontrabasů a baskytary
   const cbList = attendingBySec["Kontrabasy"] || [];
   const bassList = attendingBySec["Baskytara"] || [];
   const hasBass = bassList.length > 0;
@@ -1558,7 +1627,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     renderHexSpot(bassX, 218, bassList[0], false, "Baskytara");
   }
 
-  // Vykreslení dřevěných dechů a kláves
   const baseWoodwinds = [
     { sec: "Flétny", label: "Flétny" },
     { sec: "Hoboje", label: "Hoboje" },
@@ -1587,7 +1655,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     });
   });
 
-  // Vykreslení žesťů
   const hornList = attendingBySec["Lesní rohy"] || [];
   hornList.forEach((p, idx) => {
     const offset = (idx - (hornList.length - 1) / 2) * 36;
@@ -1606,21 +1673,19 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     renderHexSpot(540 + offset, 88, p, false, "Trombóny / Tuba");
   });
 
-  // Vykreslení bicích
   const biciList = attendingBySec["Bicí nástroje"] || [];
   biciList.forEach((p, idx) => {
     const offset = (idx - (biciList.length - 1) / 2) * 38;
     renderHexSpot(330 + offset, 38, p, false, "Bicí nástroje");
   });
 
-  // Aktualizace odznaku s počtem hráčů
   const countBadge = document.getElementById(`${prefix}-total-count`);
   if (countBadge) {
     if (showNepotvrzeni || showOmluveni) {
       let parts = [`${countPotvrzeno} ✓`];
       if (showNepotvrzeni) parts.push(`${countNepotvrzeno} ⏳`);
       if (showOmluveni) parts.push(`${countOmluveno} ✕`);
-      countBadge.textContent = `${celkemHraje} zobrazeno (${parts.join(' / ')})`;
+      countBadge.textContent = `${celkemHraje} na pódiu (${parts.join(' / ')})`;
     } else {
       countBadge.textContent = `${countPotvrzeno} na pódiu`;
     }
