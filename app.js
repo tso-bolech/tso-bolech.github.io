@@ -1223,10 +1223,19 @@ function toggleRoster(id) {
 }
 
 // =========================================================================
-// INTERAKTIVNÍ PÓDIUM ORCHESTRU (S BAREVNÝM ODLIŠENÍM STAVŮ)
+// INTERAKTIVNÍ PÓDIUM ORCHESTRU (MAXIMÁLNÍ PROSTOR PRO SCHÉMA NA MOBILU)
 // =========================================================================
 
-function onStageFilterToggle(prefix) {
+function toggleStageChip(prefix, type) {
+  const btn = document.getElementById(`${prefix}_btn_${type}`);
+  if (!btn) return;
+  
+  if (type === 'nepotvrzeni') {
+    btn.classList.toggle('is-active-nepotvrzen');
+  } else if (type === 'omluveni') {
+    btn.classList.toggle('is-active-omluven');
+  }
+  
   if (prefix === "manage") {
     refreshStagePreviewFromForm();
   }
@@ -1298,39 +1307,57 @@ function getOrchestraSvgHtml(prefix = "stage") {
       stroke-width: 2.8px !important;
       filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.6)) !important;
     }
+
+    /* ULTRA KOMPAKTNÍ TLAČÍTKA PŘEPÍNAČŮ V ZÁHLAVÍ (ŠETŘÍ MÍSTO NA DISPLEJI) */
+    .stage-chip-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 16px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      line-height: 1.2;
+      user-select: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .stage-chip-btn.is-active-nepotvrzen {
+      background: rgba(245, 158, 11, 0.18) !important;
+      border-color: #f59e0b !important;
+      color: #d97706 !important;
+      font-weight: 700 !important;
+    }
+    .stage-chip-btn.is-active-omluven {
+      background: rgba(239, 68, 68, 0.18) !important;
+      border-color: #ef4444 !important;
+      color: #dc2626 !important;
+      font-weight: 700 !important;
+    }
   </style>
 
-  <div class="stage-wrapper">
-    <div class="stage-header-info">
-      <span>Obsazení pódia</span>
-      <span class="stage-count-badge" id="${prefix}-total-count">0 na pódiu</span>
+  <div class="stage-wrapper" style="margin-top:2px;">
+    <!-- JEDEN JEDINÝ ŘÁDEK PRO POČÍTADLO I PŘEPÍNAČE -->
+    <div class="stage-header-info" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 2px; min-height:26px;">
+      <span class="stage-count-badge" id="${prefix}-total-count" style="font-size:12px; font-weight:700;">0 na pódiu</span>
+
+      ${prefix === "manage" ? `
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" id="${prefix}_btn_nepotvrzeni" class="stage-chip-btn" onclick="toggleStageChip('${prefix}', 'nepotvrzeni')" title="Zobrazit/skrýt čekající hráče">
+            ⏳ Čekající
+          </button>
+          <button type="button" id="${prefix}_btn_omluveni" class="stage-chip-btn" onclick="toggleStageChip('${prefix}', 'omluveni')" title="Zobrazit/skrýt omluvené hráče">
+            ✕ Omluvení
+          </button>
+        </div>
+      ` : ''}
     </div>
 
-    ${prefix === "manage" ? `
-      <!-- Filtrovací přepínače s barevnými odznáčky -->
-      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-end; margin-bottom:8px; padding:6px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-size:12px;">
-        <span style="font-weight:700; color:var(--text-muted); margin-right:auto;">Zobrazit na pódiu:</span>
-        
-        <label style="display:inline-flex; align-items:center; gap:5px; cursor:default; color:var(--text); font-weight:700;">
-          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(16,185,129,0.3); border:1.5px solid #10b981;"></span>
-          <input type="checkbox" id="${prefix}_toggle_potvrzeni" checked disabled style="display:none;">
-          <span>Potvrzení</span>
-        </label>
-
-        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:#d97706; font-weight:700;">
-          <input type="checkbox" id="${prefix}_toggle_nepotvrzeni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#f59e0b; transform:scale(1.15);">
-          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(245,158,11,0.3); border:1.5px dashed #f59e0b;"></span>
-          <span>Nepotvrzení</span>
-        </label>
-
-        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer; color:var(--danger); font-weight:700;">
-          <input type="checkbox" id="${prefix}_toggle_omluveni" onchange="onStageFilterToggle('${prefix}')" style="accent-color:#ef4444; transform:scale(1.15);">
-          <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgba(239,68,68,0.3); border:1.5px dotted #ef4444;"></span>
-          <span>Omluvení</span>
-        </label>
-      </div>
-    ` : ''}
-
+    <!-- SAMOTNÉ SCHÉMA PÓDIA V PLNÉ VELIKOSTI -->
     <svg viewBox="0 0 660 375" id="${prefix}-svg" style="width:100%; height:auto; display:block; user-select:none;">
       <rect x="190" y="4" width="280" height="46" rx="8" fill="var(--sec-bg)"/>
       <rect x="8" y="52" width="644" height="52" rx="8" fill="var(--sec-bg)"/>
@@ -1354,15 +1381,22 @@ function getOrchestraSvgHtml(prefix = "stage") {
       <text x="560" y="362" class="sec-label">Violoncella</text>
     </svg>
 
-    <div id="${prefix}-detail-box" class="stage-player-detail">
-      <div class="detail-name" style="font-size:0.95rem; font-weight:normal; color:var(--text-muted);">
-        👆 Klepněte na hráče nebo dirigenta pro detail
-      </div>
-      <div class="detail-status" style="color:var(--text-muted); font-size:0.8rem;">
-        Zobrazují se potvrzení hráči
-      </div>
+    <!-- SLIM JEDNOŘÁDKOVÝ DETAIL HRÁČE -->
+    <div id="${prefix}-detail-box" style="margin-top:4px; padding:4px 8px; font-size:12.5px; border-radius:4px; background:var(--surface); border:1px solid var(--border); min-height:26px; display:flex; align-items:center;">
+      <span style="color:var(--text-muted); font-size:11.5px;">👆 Klepněte na židli pro detail</span>
     </div>
   </div>`;
+}
+
+function showPlayerDetailBox(prefix, name, status, color) {
+  const box = document.getElementById(`${prefix}-detail-box`);
+  if (!box) return;
+  box.innerHTML = `
+    <div style="width:100%; display:flex; justify-content:space-between; align-items:center; gap:6px;">
+      <strong style="color:var(--text); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(name)}</strong>
+      <span style="color:${color}; font-size:11.5px; font-weight:700; white-space:nowrap;">${escapeHtml(status)}</span>
+    </div>
+  `;
 }
 
 function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgRoster = null) {
@@ -1376,8 +1410,11 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   const limits = Object.keys(cfgLimits).length > 0 ? cfgLimits : (savedCfg.limits || {});
   const activeRoster = cfgRoster !== null ? cfgRoster : (savedCfg.roster || {});
 
-  const showNepotvrzeni = !!(document.getElementById(`${prefix}_toggle_nepotvrzeni`)?.checked);
-  const showOmluveni = !!(document.getElementById(`${prefix}_toggle_omluveni`)?.checked);
+  // Zjištění stavu pilulkových přepínačů přímo z tříd
+  const btnNep = document.getElementById(`${prefix}_btn_nepotvrzeni`);
+  const btnOml = document.getElementById(`${prefix}_btn_omluveni`);
+  const showNepotvrzeni = btnNep ? btnNep.classList.contains('is-active-nepotvrzen') : false;
+  const showOmluveni = btnOml ? btnOml.classList.contains('is-active-omluven') : false;
 
   const dynamicGroup = document.getElementById(`${prefix}-dynamic-spots`);
   const dynamicLabelsGroup = document.getElementById(`${prefix}-dynamic-labels`);
@@ -1504,7 +1541,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     label.setAttribute("y", y);
     label.textContent = isDir ? "DIR" : getPlayerDisplayLabel(p.celeJmeno, isKm);
 
-    // Dvojitá pojistka: nastavíme inline styly přímo do elementu s !important
     if (isDir) {
       polygon.style.setProperty("fill", "rgba(245, 158, 11, 0.25)", "important");
       polygon.style.setProperty("stroke", "#f59e0b", "important");
@@ -1539,19 +1575,19 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     spot.appendChild(polygon);
     spot.appendChild(label);
 
-    const playerLabel = p.celeJmeno + (isKm ? " 🎻 (Koncertní mistr)" : "");
-    let statusText = `${secName} • ✓ Potvrzena účast`;
+    const playerLabel = p.celeJmeno + (isKm ? " 🎻 (KM)" : "");
+    let statusText = `✓ Potvrzeno (${secName})`;
     let statusColor = "var(--success)";
 
     if (isDir) {
       statusText = `🎼 Dirigent ${dirStav === "Ano" ? "(potvrzeno)" : (dirStav === "Ne" ? "(omluven)" : "(čeká se)")}`;
       statusColor = "#d97706";
     } else if (stav === "Ceka") {
-      statusText = `${secName} • ⏳ Čeká se na vyjádření`;
+      statusText = `⏳ Čeká se (${secName})`;
       statusColor = "#d97706";
     } else if (stav === "Ne") {
-      const duvodText = (p.duvod && p.duvod.trim()) ? `: ${escapeHtml(p.duvod.trim())}` : " (důvod neuveden)";
-      statusText = `${secName} • ✕ Omluven/a${duvodText}`;
+      const duvodText = (p.duvod && p.duvod.trim()) ? `: ${escapeHtml(p.duvod.trim())}` : "";
+      statusText = `✕ Omluven/a${duvodText} (${secName})`;
       statusColor = "var(--danger)";
     }
 
@@ -1580,15 +1616,6 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     if (dirSpot) {
       dirSpot.classList.add("is-selected");
       showPlayerDetailBox(prefix, dirigentJmeno, `🎼 Dirigent ${dirStav === "Ano" ? "(potvrzeno)" : ""}`, "#d97706");
-    }
-  } else {
-    const detailBox = document.getElementById(`${prefix}-detail-box`);
-    if (detailBox) {
-      detailBox.innerHTML = `
-        <div class="detail-name" style="font-size:0.95rem; font-weight:normal; color:var(--text-muted);">
-          👆 Klepněte na hráče pro detail
-        </div>
-      `;
     }
   }
 
@@ -1685,20 +1712,11 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       let parts = [`${countPotvrzeno} ✓`];
       if (showNepotvrzeni) parts.push(`${countNepotvrzeno} ⏳`);
       if (showOmluveni) parts.push(`${countOmluveno} ✕`);
-      countBadge.textContent = `${celkemHraje} na pódiu (${parts.join(' / ')})`;
+      countBadge.textContent = `${celkemHraje} (${parts.join(' / ')})`;
     } else {
       countBadge.textContent = `${countPotvrzeno} na pódiu`;
     }
   }
-}
-
-function showPlayerDetailBox(prefix, name, status, color) {
-  const box = document.getElementById(`${prefix}-detail-box`);
-  if (!box) return;
-  box.innerHTML = `
-    <div class="detail-name">${escapeHtml(name)}</div>
-    <div class="detail-status" style="color: ${color};">${escapeHtml(status)}</div>
-  `;
 }
 
 function openStageModalForAkce(akceId) {
