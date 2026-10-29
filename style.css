@@ -1202,3 +1202,87 @@ body.card-flipped-active .card:not(.card-flip-container) {
   display: flex;
   gap: 8px;
 }
+
+/* =========================================================================
+   DECENTNÍ LIŠTA SYNCHRONIZACE (MINIMALISTICKÁ, BEZ KARTY)
+   ========================================================================= */
+.sync-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 2px;
+  margin: 0 0 6px 0;
+  font-size: 11.5px;
+}
+
+.sync-status-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  color: var(--text-muted, #64748b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Decentní stavy */
+.sync-status-bar.is-success .sync-indicator { color: var(--success, #10b981); }
+.sync-status-bar.is-success .sync-text { color: var(--text-muted, #64748b); }
+
+.sync-status-bar.is-loading .sync-indicator { color: #d97706; }
+.sync-status-bar.is-loading .sync-text { color: #d97706; }
+
+.sync-status-bar.is-error .sync-indicator { color: var(--danger, #ef4444); }
+.sync-status-bar.is-error .sync-text { color: var(--danger, #ef4444); }
+
+/* Nenápadné tlačítko bez rámečku */
+.sync-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sync-refresh-btn:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text, #0f172a);
+}
+
+.sync-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sync-btn-svg {
+  display: block;
+  transform-origin: center;
+}
+
+.sync-spin {
+  animation: syncRotation 0.8s linear infinite;
+}
+
+@keyframes syncRotation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

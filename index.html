@@ -111,9 +111,29 @@
     
     <div class="container">
       <div id="tab-events">
+        <!-- STAVOVÁ LIŠTA SYNCHRONIZACE S TABULKOU -->
+        <div class="sync-status-bar" id="syncStatusBar">
+          <div class="sync-status-info">
+            <span class="sync-indicator" id="syncIcon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </span>
+            <span class="sync-text" id="syncText">Vše aktuální</span>
+          </div>
+
+          <button type="button" class="sync-refresh-btn" id="syncRefreshBtn" onclick="manualSyncFromTable()" title="Zkontrolovat aktuální data v tabulce">
+            <svg class="sync-btn-svg" id="syncBtnSvg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.24L21 8"></path>
+              <polyline points="21 3 21 8 16 8"></polyline>
+            </svg>
+            <span>Obnovit</span>
+          </button>
+        </div>
+
         <div id="eventsContainer">Načítám data...</div>
       </div>
-      
+            
       <div id="tab-archive" style="display: none;">
         <h2 style="margin-bottom: 16px; font-size: 20px;">Historie</h2>
         <div id="archiveContainer"></div>

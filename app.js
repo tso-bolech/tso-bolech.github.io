@@ -483,7 +483,16 @@ function initApp() {
     adminNavBtn.style.display = canEdit ? 'flex' : 'none';
   }
 
-  // 2. Zobrazení tlačítka historie hodin ⏱ v horní liště
+  // 2. Okamžité zobrazení času poslední synchronizace z paměti telefonu
+  const lastSync = localStorage.getItem("bolech_last_sync_time");
+  if (lastSync) {
+    const d = new Date(lastSync);
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    updateSyncStatusUI("success", `Vše aktuální (${h}:${m})`);
+  }
+
+  // 3. Okamžité vykreslení rozhraní z lokální mezipaměti (žádné čekání na prázdný displej)
   const cachedData = localStorage.getItem("bolech_data_cache");
   if (cachedData) { 
     appData = JSON.parse(cachedData); 
@@ -496,15 +505,34 @@ function initApp() {
     if (canEdit) vykresliAdminNoty();
   }
 
-  runGoogleScript("getInitialData").then(d => { 
-    if(d && d.akce) {
-      appData = d; 
-      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
-      renderEvents(); 
-      vykresliNoty(appData.noty || [], user.section, jeDirigent);
-      if (canEdit) vykresliAdminNoty();
-    }
-  });
+  // 4. Nastavení lišty na probíhající synchronizaci
+  updateSyncStatusUI("loading", "Synchronizuji s tabulkou...");
+
+  // 5. Ověření nejnovějších dat na pozadí
+  runGoogleScript("getInitialData")
+    .then(d => { 
+      if (d && d.akce) {
+        appData = d; 
+        localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+        
+        // Uložení aktuálního časového razítka
+        const now = new Date();
+        localStorage.setItem("bolech_last_sync_time", now.toISOString());
+
+        renderEvents(); 
+        vykresliNoty(appData.noty || [], user.section, jeDirigent);
+        if (canEdit) vykresliAdminNoty();
+
+        // Přepnutí lišty na zelenou fajfku s čerstvým časem
+        updateSyncStatusUI("success", getSyncTimeFormatted(now));
+      } else {
+        updateSyncStatusUI("error", "Data z paměti (offline)");
+      }
+    })
+    .catch(err => {
+      console.warn("Chyba při synchronizaci s tabulkou:", err);
+      updateSyncStatusUI("error", "Data z paměti (offline)");
+    });
 }
 
 const CZECH_DAYS_SHORT = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
@@ -2129,9 +2157,12 @@ function getRosterFromForm() {
 }
 
 function refreshStagePreviewFromForm() {
-  const akceId = document.getElementById("orch_modal_akce").value;
-  const km = document.getElementById("orch_modal_km")?.value || "";
+  const modalSelect = document.getElementById("orch_modal_akce");
+  if (!modalSelect) return; // <-- Ochrana: pokud okno není otevřené, nic neděláme
 
+  const akceId = modalSelect.value;
+  const km = document.getElementById("orch_modal_km")?.value || "";
+  
   const limits = {};
   document.querySelectorAll(".sec-limit-input").forEach(sel => {
     limits[sel.dataset.sec] = parseInt(sel.value, 10);
@@ -4251,4 +4282,111 @@ function getAktualniEditor() {
     if (ulozeny.name || ulozeny.celeJmeno) return ulozeny.name || ulozeny.celeJmeno;
   } catch (e) {}
   return "Vedení";
+}
+
+// =========================================================================
+// SYNCHRONIZAČNÍ LIŠTA – STAV AKTUÁLNOSTI A RUČNÍ OBNOVA
+// =========================================================================
+
+function updateSyncStatusUI(status, message) {
+  const bar = document.getElementById("syncStatusBar");
+  const icon = document.getElementById("syncIcon");
+  const text = document.getElementById("syncText");
+  const btn = document.getElementById("syncRefreshBtn");
+  const btnSvg = document.getElementById("syncBtnSvg");
+  if (!bar || !icon || !text) return;
+
+  bar.classList.remove("is-loading", "is-success", "is-error");
+
+  if (status === "loading") {
+    bar.classList.add("is-loading");
+    icon.innerHTML = `
+      <svg class="sync-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle>
+        <path d="M12 3a9 9 0 0 1 9 9"></path>
+      </svg>
+    `;
+    text.textContent = message || "Synchronizuji s tabulkou...";
+    if (btn) btn.disabled = true;
+    if (btnSvg) btnSvg.classList.add("sync-spin");
+
+  } else if (status === "success") {
+    bar.classList.add("is-success");
+    icon.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    `;
+    text.textContent = message || "Vše aktuální";
+    if (btn) btn.disabled = false;
+    if (btnSvg) btnSvg.classList.remove("sync-spin");
+
+  } else if (status === "error") {
+    bar.classList.add("is-error");
+    icon.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+    `;
+    text.textContent = message || "Nepodařilo se ověřit data";
+    if (btn) btn.disabled = false;
+    if (btnSvg) btnSvg.classList.remove("sync-spin");
+  }
+}
+
+function getSyncTimeFormatted(dateObj = new Date()) {
+  const hours = String(dateObj.getHours()).padStart(2, "0");
+  const mins = String(dateObj.getMinutes()).padStart(2, "0");
+  return `Vše aktuální (${hours}:${mins})`;
+}
+
+async function manualSyncFromTable() {
+  updateSyncStatusUI("loading", "Stahuji data z tabulky...");
+
+  try {
+    const d = await runGoogleScript("getInitialData");
+    if (d && d.akce) {
+      appData = d;
+      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+      
+      const now = new Date();
+      localStorage.setItem("bolech_last_sync_time", now.toISOString());
+      if (typeof posledniAktualizaceCas !== 'undefined') {
+        posledniAktualizaceCas = Date.now();
+      }
+
+      // 1. Překreslení seznamu akcí
+      renderEvents();
+
+      // 2. Bezpečné překreslení not podle role
+      if (user) {
+        const userRole = String(user.role || "").trim().toLowerCase();
+        const canEdit = (typeof hasEditRights === 'function' && hasEditRights(user.role)) || userRole.includes('veden') || userRole.includes('admin');
+        const jeDirigentAktivni = typeof isUserConductor === 'function' ? isUserConductor(user) : (userRole === 'dirigent');
+        const efektivniNastroj = (user.section && user.section.toLowerCase() === 'dirigent') ? 'Partitura' : user.section;
+
+        if (typeof vykresliNoty === "function") {
+          vykresliNoty(appData.noty || [], efektivniNastroj, jeDirigentAktivni);
+        }
+        if (canEdit && typeof vykresliAdminNoty === "function") {
+          vykresliAdminNoty();
+        }
+      }
+
+      // 3. Pódium překreslíme POUZE tehdy, pokud je zrovna otevřené okno obsazení
+      if (document.getElementById("orch_modal_akce") && typeof refreshStagePreviewFromForm === "function") {
+        refreshStagePreviewFromForm();
+      }
+
+      // 4. Úspěšné potvrzení v liště
+      updateSyncStatusUI("success", getSyncTimeFormatted(now));
+    } else {
+      updateSyncStatusUI("error", "Data z paměti (offline)");
+    }
+  } catch (err) {
+    console.warn("Chyba při ruční synchronizaci:", err);
+    updateSyncStatusUI("error", "Data z paměti (offline)");
+  }
 }
