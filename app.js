@@ -23,7 +23,7 @@ if ('serviceWorker' in navigator) {
 const API_URL = "https://script.google.com/macros/s/AKfycbwVHLODjApvEPwE4RQo5nQxdr9Y8Ng-EoWTGGsH3l45L174huUMCh_99edIV-cbXQVHQQ/exec";
 
 let user = null; 
-let appData = { akce: [], noty: [], ucast: [], clenove: [], zadosti: [], orchestraConfig: {} };
+let appData = { akce: [], noty: [], ucast: [], clenove: [], zadosti: [], orchestraConfig: {}, anketyHlasy: [] };
 
 // Seznam vybraných not pro odeslání e-mailem
 window.vybraneNotyKEmailu = [];
@@ -177,7 +177,6 @@ function initLayoutMode() {
     return;
   }
 
-  // Admin má tlačítko viditelné
   if (btn) btn.style.display = 'inline-flex';
 
   const savedMode = localStorage.getItem('bolech_layout_mode');
@@ -188,7 +187,6 @@ function initLayoutMode() {
     document.body.classList.remove('desktop-mode');
     updateLayoutIcon(false);
   } else {
-    // Automatická detekce při prvním spuštění na PC (myš + široké okno)
     const isPC = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches;
     if (isPC) {
       document.body.classList.add('desktop-mode');
@@ -386,7 +384,6 @@ function openAdminNewsModal() {
   const existing = document.getElementById('adminNewsModal');
   if (existing) { existing.remove(); return; }
 
-  // Načteme všechny položky určené pro editory seřazené od nejnovější
   const newsItems = (appData.akce || [])
     .filter(a => {
       const cs = String(a.cilovaSkupina || '').trim().toLowerCase();
@@ -492,7 +489,7 @@ function initApp() {
     updateSyncStatusUI("success", `Vše aktuální (${h}:${m})`);
   }
 
-  // 3. Okamžité vykreslení rozhraní z lokální mezipaměti (žádné čekání na prázdný displej)
+  // 3. Okamžité vykreslení rozhraní z lokální mezipaměti
   const cachedData = localStorage.getItem("bolech_data_cache");
   if (cachedData) { 
     appData = JSON.parse(cachedData); 
@@ -515,15 +512,16 @@ function initApp() {
         appData = d; 
         localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
         
-        // Uložení aktuálního časového razítka
         const now = new Date();
         localStorage.setItem("bolech_last_sync_time", now.toISOString());
+        if (typeof posledniAktualizaceCas !== 'undefined') {
+          posledniAktualizaceCas = Date.now();
+        }
 
         renderEvents(); 
         vykresliNoty(appData.noty || [], user.section, jeDirigent);
         if (canEdit) vykresliAdminNoty();
 
-        // Přepnutí lišty na zelenou fajfku s čerstvým časem
         updateSyncStatusUI("success", getSyncTimeFormatted(now));
       } else {
         updateSyncStatusUI("error", "Data z paměti (offline)");
@@ -681,6 +679,7 @@ function generovatIdAkce(typ) {
   else if (t.includes('generálka')) prefix = 'gen_';
   else if (t.includes('zkouška') || t.includes('zkouska')) prefix = 'zk_'; 
   else if (t.includes('informace') || t.includes('oznámení')) prefix = 'info_';
+  else if (t.includes('anketa')) prefix = 'ank_';
 
   let max = 0;
   (appData.akce || []).forEach(a => {
@@ -810,13 +809,38 @@ function zavritOtocenouKartu() {
 
 function parsovatPoznamku(rawNote) {
   let text = String(rawNote || '').trim();
-  if (!text) return { mainNote: '', progData: '', schedData: '' };
+  if (!text) return { mainNote: '', progData: '', schedData: '', anketaCfg: null };
 
   const progRegex = /={2,}\s*PROGRAM\s*={2,}/i;
   const harmRegex = /={2,}\s*HARMONOGRAM\s*={2,}/i;
+  const anketaRegex = /={2,}\s*ANKETA\s*={2,}/i;
 
   let progMatch = progRegex.exec(text);
   let harmMatch = harmRegex.exec(text);
+  let anketaMatch = anketaRegex.exec(text);
+
+  let anketaCfg = null;
+  let anketaRaw = '';
+  if (anketaMatch) {
+    anketaRaw = text.substring(anketaMatch.index + anketaMatch[0].length);
+    text = text.substring(0, anketaMatch.index).trim();
+    
+    progMatch = progRegex.exec(text);
+    harmMatch = harmRegex.exec(text);
+
+    anketaCfg = { typVolby: 'jedna', viditelnost: 'vsichni', moznosti: [] };
+    const lines = anketaRaw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    lines.forEach(l => {
+      if (l.toUpperCase().startsWith('VOLBA:')) {
+        anketaCfg.typVolby = l.split(':')[1].trim().toLowerCase().includes('vice') ? 'vice' : 'jedna';
+      } else if (l.toUpperCase().startsWith('VIDITELNOST:')) {
+        anketaCfg.viditelnost = l.split(':')[1].trim().toLowerCase().includes('veden') ? 'vedeni' : 'vsichni';
+      } else if (l.toUpperCase().startsWith('MOZNOST:')) {
+        const m = l.substring(l.indexOf(':') + 1).trim();
+        if (m) anketaCfg.moznosti.push(m);
+      }
+    });
+  }
 
   let mainNote = '';
   let progData = '';
@@ -856,12 +880,14 @@ function parsovatPoznamku(rawNote) {
   mainNote = mainNote
     .replace(/={2,}\s*PROGRAM\s*={2,}[\s\S]*/gi, '')
     .replace(/={2,}\s*HARMONOGRAM\s*={2,}[\s\S]*/gi, '')
+    .replace(/={2,}\s*ANKETA\s*={2,}[\s\S]*/gi, '')
     .trim();
 
   return { 
     mainNote: mainNote, 
     progData: progData.trim(), 
-    schedData: schedData.trim() 
+    schedData: schedData.trim(),
+    anketaCfg: anketaCfg
   };
 }
 
@@ -1011,7 +1037,8 @@ function renderEvents() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
-  const hudebniAkce = vsechnyViditelne.filter(a => !a.typ.includes('Oznámení') && !a.typ.includes('Informace'));
+  const aktivniAnkety = vsechnyViditelne.filter(a => a.typ === 'Anketa');
+  const hudebniAkce = vsechnyViditelne.filter(a => !a.typ.includes('Oznámení') && !a.typ.includes('Informace') && a.typ !== 'Anketa');
 
   const nadchazejiciAkce = hudebniAkce
     .filter(a => parseDate(a.datum) >= todayTs)
@@ -1034,9 +1061,10 @@ function renderEvents() {
       return parseTimeToMinutes(a.casOd) - parseTimeToMinutes(b.casOd);
     });
 
+  aktivniAnkety.forEach(a => cont.innerHTML += generateAnketaHtml(a, canEdit));
   aktivniOznameni.forEach(a => cont.innerHTML += generateOznameniHtml(a, canEdit));
   
-  if (nadchazejiciAkce.length === 0 && aktivniOznameni.length === 0) {
+  if (nadchazejiciAkce.length === 0 && aktivniOznameni.length === 0 && aktivniAnkety.length === 0) {
     cont.innerHTML += `<div style="text-align:center; padding:40px; color:var(--text-muted);">Žádné nadcházející akce nejsou naplánovány.</div>`;
   } else {
     nadchazejiciAkce.forEach(a => cont.innerHTML += generateAkceHtml(a, canEdit));
@@ -1779,7 +1807,7 @@ function openStageModalForAkce(akceId) {
 }
 
 function openOrchestrModal() {
-  const vsechnyAkce = (appData.akce || []).filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"));
+  const vsechnyAkce = (appData.akce || []).filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace") && a.typ !== 'Anketa');
   if (vsechnyAkce.length === 0) {
     alert("Zatím nemáte vytvořeny žádné hudební akce.");
     return;
@@ -2168,8 +2196,7 @@ function getRosterFromForm() {
 
 function refreshStagePreviewFromForm() {
   const modalSelect = document.getElementById("orch_modal_akce");
-  if (!modalSelect) return; // <-- Ochrana: pokud okno není otevřené, nic neděláme
-
+  if (!modalSelect) return;
   const akceId = modalSelect.value;
   const km = document.getElementById("orch_modal_km")?.value || "";
 
@@ -2319,7 +2346,43 @@ function openAkceForm(param = null, isReadOnly = false) {
             <option value="Koncert" ${akce?.typ==='Koncert'?'selected':''}>Koncert</option>
             <option value="Informace" ${(akce?.typ==='Informace' || akce?.typ==='Oznámení') ? 'selected' : ''}>Informace</option>
             <option value="Informace (Historie)" ${(akce?.typ==='Informace (Historie)' || akce?.typ==='Informace (Infoarchiv)' || akce?.typ==='Oznámení (Archiv)') ? 'selected' : ''}>Informace (Historie)</option>
+            <option value="Anketa" ${akce?.typ==='Anketa'?'selected':''}>📊 Anketa</option>
           </select>
+
+          <!-- PARAMETRY ANKETY -->
+          <div id="row_anketa_nastaveni" style="display:${akce?.typ==='Anketa'?'block':'none'}; background:rgba(99,102,241,0.06); border:1px solid #6366f1; border-radius:8px; padding:12px; margin-top:10px; margin-bottom:14px;">
+            <h4 style="margin:0 0 10px 0; color:#4f46e5; font-size:14px; display:flex; align-items:center; gap:6px;">
+              <span>📊</span> Parametry ankety
+            </h4>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+              <div>
+                <label style="font-size:12px; font-weight:700;">Typ volby:</label>
+                <select id="f_anketa_typ_volby" class="modal-input" style="height:36px; margin-top:4px;">
+                  <option value="jedna" ${parsed.anketaCfg?.typVolby==='jedna'?'selected':''}>Jedna možnost (Radio)</option>
+                  <option value="vice" ${parsed.anketaCfg?.typVolby==='vice'?'selected':''}>Více možností (Checkbox)</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700;">Viditelnost výsledků:</label>
+                <select id="f_anketa_viditelnost" class="modal-input" style="height:36px; margin-top:4px;">
+                  <option value="vsichni" ${parsed.anketaCfg?.viditelnost==='vsichni'?'selected':''}>Všichni hlasující</option>
+                  <option value="vedeni" ${parsed.anketaCfg?.viditelnost==='vedeni'?'selected':''}>Pouze vedení / editoři</option>
+                </select>
+              </div>
+            </div>
+
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Možnosti odpovědí:</label>
+            <div id="anketa_options_container" style="display:flex; flex-direction:column; gap:6px;">
+              ${(parsed.anketaCfg?.moznosti && parsed.anketaCfg.moznosti.length > 0 ? parsed.anketaCfg.moznosti : ['', '']).map((opt, i) => `
+                <div class="anketa-opt-row" style="display:flex; gap:6px; align-items:center;">
+                  <input type="text" class="modal-input anketa-opt-input" placeholder="Možnost ${i+1}" value="${escapeHtml(opt)}" style="margin:0; height:34px;">
+                  <button type="button" class="btn" style="background:transparent; color:#ef4444; border:1px solid #ef4444; width:34px; height:34px; padding:0;" onclick="this.parentElement.remove()">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <button type="button" class="btn" style="background:transparent; color:var(--primary); border:1px dashed var(--primary); width:100%; margin-top:8px; padding:6px; font-size:12px; font-weight:700;" onclick="addAnketaOptionRow()">+ Přidat možnost odpovědi</button>
+          </div>
 
           <!-- VÝBĚR CÍLOVÉ SKUPINY PRO INFORMACE -->
           <div id="row_cilovaSkupina" style="display:none; margin-bottom:14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
@@ -2541,20 +2604,29 @@ function addScheduleRow(time = '', desc = '', isReadOnly = false) {
 
 function toggleAkceFields() {
   const typ = document.getElementById('f_typ').value;
+  const jeAnketa = typ.includes('Anketa');
   const jeOznameni = typ.includes('Oznámení') || typ.includes('Informace');
   const jeZkouska = typ.includes('zkouška') || typ.includes('Zkouška');
   
+  const rowAnketa = document.getElementById('row_anketa_nastaveni');
+  if (rowAnketa) rowAnketa.style.display = jeAnketa ? 'block' : 'none';
+
   const rowCil = document.getElementById('row_cilovaSkupina');
-  if (rowCil) rowCil.style.display = jeOznameni ? 'block' : 'none';
+  if (rowCil) rowCil.style.display = (jeOznameni || jeAnketa) ? 'block' : 'none';
+
+  const dateLabel = document.getElementById('lbl_datum_akce');
+  if (dateLabel) {
+    dateLabel.innerText = jeAnketa ? 'Datum uzávěrky ankety:' : (jeOznameni ? 'Datum zveřejnění:' : 'Datum akce:');
+  }
 
   const rowDirigent = document.getElementById('row_dirigent');
-  if (rowDirigent) rowDirigent.style.display = jeOznameni ? 'none' : 'block';
+  if (rowDirigent) rowDirigent.style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
 
   const rowCasyHlavni = document.getElementById('row_casy_hlavni');
-  if (rowCasyHlavni) rowCasyHlavni.style.display = jeOznameni ? 'none' : 'flex';
+  if (rowCasyHlavni) rowCasyHlavni.style.display = (jeOznameni || jeAnketa) ? 'none' : 'flex';
 
-  document.getElementById('row_misto').style.display = jeOznameni ? 'none' : 'block';
-  document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni) ? 'none' : 'flex';
+  document.getElementById('row_misto').style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
+  document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni || jeAnketa) ? 'none' : 'flex';
   document.getElementById('row_obleceni').style.display = (typ === 'Koncert') ? 'flex' : 'none';
   document.getElementById('col_generalka').style.display = (typ === 'Koncert') ? 'block' : 'none';
 }
@@ -2570,7 +2642,7 @@ function submitAkceForm(e, akceId) {
   const finalId = akceId || generovatIdAkce(typ);
 
   const cilovaSkupinaEl = document.getElementById('f_cilovaSkupina');
-  const finalCilovaSkupina = (jeOznameni && cilovaSkupinaEl) ? cilovaSkupinaEl.value : 'vsichni';
+  const finalCilovaSkupina = ((jeOznameni || typ === 'Anketa') && cilovaSkupinaEl) ? cilovaSkupinaEl.value : 'vsichni';
 
   let rawNoteInput = document.getElementById('f_poznamka').value;
   let finalPoznamka = rawNoteInput
@@ -2606,6 +2678,19 @@ function submitAkceForm(e, akceId) {
   }
   if (schedLines.length > 0) {
     finalPoznamka += `\n\n===HARMONOGRAM===\n` + schedLines.join('\n');
+  }
+
+  if (typ === 'Anketa') {
+    const typVolby = document.getElementById('f_anketa_typ_volby')?.value || 'jedna';
+    const viditelnost = document.getElementById('f_anketa_viditelnost')?.value || 'vsichni';
+    const optInputs = document.querySelectorAll('.anketa-opt-input');
+    const opts = [];
+    optInputs.forEach(inp => {
+      const v = inp.value.trim();
+      if (v) opts.push(v);
+    });
+
+    finalPoznamka += `\n\n===ANKETA===\nVOLBA: ${typVolby.toUpperCase()}\nVIDITELNOST: ${viditelnost.toUpperCase()}\n` + opts.map(o => `MOZNOST: ${o}`).join('\n');
   }
 
   const payload = {
@@ -4442,7 +4527,8 @@ function generateIcsData(eventsList) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:TSO Bolech – Kalendář akcí',
-    'X-WR-TIMEZONE:Europe/Prague'
+    'X-WR-TIMEZONE:Europe/Prague',
+    'X-APPLE-CALENDAR-COLOR:#10B981'
   ];
 
   const nowIso = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -4538,7 +4624,7 @@ function openCalendarExportModal() {
   const todayTs = today.getTime();
 
   const nadchazejici = (appData.akce || [])
-    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace") && a.typ !== 'Anketa')
     .filter(a => parseDate(a.datum) >= todayTs)
     .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
 
@@ -4583,12 +4669,12 @@ function downloadAllEventsIcs(jenMojeSekce = false) {
   const todayTs = today.getTime();
 
   let akce = (appData.akce || [])
-    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace") && a.typ !== 'Anketa')
     .filter(a => parseDate(a.datum) >= todayTs)
     .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
 
   if (jenMojeSekce && user?.section) {
-    akce = akce.filter(a => canUserSeeAkce(a));
+    akce = akce.filter(a => isEventVisibleForUser(a));
   }
 
   if (akce.length === 0) {
@@ -4609,7 +4695,7 @@ function openPrintCalendarModal() {
   const todayTs = today.getTime();
 
   const akceList = (appData.akce || [])
-    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace") && a.typ !== 'Anketa')
     .filter(a => parseDate(a.datum) >= todayTs)
     .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
 
@@ -4659,11 +4745,11 @@ function openPrintCalendarModal() {
           <table class="print-table" style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead>
               <tr style="background:#f1f5f9; border-bottom:1px solid #000;">
-                <th style="padding:6px; text-align:left; width:105px;">Datum</th>
-                <th style="padding:6px; text-align:left; width:95px;">Čas</th>
-                <th style="padding:6px; text-align:left;">Akce & Program</th>
-                <th style="padding:6px; text-align:left; width:130px;">Místo</th>
-                <th style="padding:6px; text-align:left; width:140px;">Oděv / Poznámka</th>
+                <th style="padding:6px; text-align:left; width:105px; vertical-align:top;">Datum</th>
+                <th style="padding:6px; text-align:left; width:95px; vertical-align:top;">Čas</th>
+                <th style="padding:6px; text-align:left; vertical-align:top;">Akce & Program</th>
+                <th style="padding:6px; text-align:left; width:130px; vertical-align:top;">Místo</th>
+                <th style="padding:6px; text-align:left; width:140px; vertical-align:top;">Oděv / Poznámka</th>
               </tr>
             </thead>
             <tbody>
@@ -4691,4 +4777,233 @@ function triggerPrintCalendar() {
   printDiv.innerHTML = printArea.innerHTML;
 
   window.print();
+}
+
+// =========================================================================
+// ANKETY: ZOBRAZENÍ, HLASOVÁNÍ A ZVEŘEJNĚNÍ VÝSLEDKŮ VEDENÍM
+// =========================================================================
+
+function generateAnketaHtml(akce, canEdit) {
+  const parsed = parsovatPoznamku(akce.poznamka);
+  const cfg = parsed.anketaCfg || { typVolby: 'jedna', viditelnost: 'vsichni', moznosti: [] };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadlineTs = parseDate(akce.datum);
+  const jePoUzaverce = deadlineTs > 0 && deadlineTs < today.getTime();
+
+  const myVoteRow = (appData.anketyHlasy || []).find(h => String(h.anketaId) === String(akce.id) && h.jmeno === user.name);
+  const myChoices = myVoteRow ? String(myVoteRow.volby).split(' | ').map(s => s.trim()) : [];
+  const uzHlasoval = myChoices.length > 0;
+
+  const allVotes = (appData.anketyHlasy || []).filter(h => String(h.anketaId) === String(akce.id));
+  const celkemHlasujicich = allVotes.length;
+
+  const counts = {};
+  const votersByOption = {};
+  cfg.moznosti.forEach(m => {
+    counts[m] = 0;
+    votersByOption[m] = [];
+  });
+
+  allVotes.forEach(v => {
+    const list = String(v.volby).split(' | ').map(s => s.trim());
+    list.forEach(item => {
+      if (counts[item] !== undefined) {
+        counts[item]++;
+        votersByOption[item].push(v.jmeno);
+      }
+    });
+  });
+
+  const jeZverejneno = cfg.viditelnost === 'vsichni';
+  const muzeVidetVysledky = jeZverejneno || canEdit;
+
+  const editBtn = canEdit ? `
+    <button type="button" class="edit-btn" onclick="event.preventDefault(); event.stopPropagation(); checkAndOpenAkceForm('${escapeHtml(akce.id)}');" title="Upravit anketu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+    </button>
+  ` : "";
+
+  let publishBtn = '';
+  if (canEdit && !jeZverejneno) {
+    publishBtn = `
+      <div style="margin-top:14px; padding:10px; background:rgba(16,185,129,0.08); border:1px solid #10b981; border-radius:6px; text-align:center;">
+        <div style="font-size:12px; color:#065f46; font-weight:700; margin-bottom:6px;">Výsledky jsou zatím skryté pro členy (pouze pro vedení).</div>
+        <button type="button" class="btn" style="background:#10b981; color:#ffffff; font-size:12.5px; font-weight:700; padding:6px 14px;" onclick="schvalitAZverejnitVysledky('${akce.id}')">
+          📢 Schválit vedením a zveřejnit výsledky orchestru
+        </button>
+      </div>
+    `;
+  }
+
+  let optionsHtml = '';
+  if (!jePoUzaverce) {
+    optionsHtml = `
+      <div class="anketa-options-list" style="margin: 12px 0;">
+        ${cfg.moznosti.map((m) => {
+          const checked = myChoices.includes(m) ? 'checked' : '';
+          const inputType = cfg.typVolby === 'vice' ? 'checkbox' : 'radio';
+          const inputName = `anketa_opt_${akce.id}`;
+          return `
+            <label class="anketa-choice-label ${checked ? 'selected' : ''}" style="display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); margin-bottom:6px; cursor:pointer; background:var(--bg);">
+              <input type="${inputType}" name="${inputName}" value="${escapeHtml(m)}" ${checked} class="anketa-input-${akce.id}" style="width:18px; height:18px; accent-color:#6366f1;">
+              <span style="font-size:14px; font-weight:600;">${escapeHtml(m)}</span>
+            </label>
+          `;
+        }).join('')}
+      </div>
+      <button class="btn" style="background:#6366f1; color:#ffffff; width:100%; padding:10px; font-weight:700; font-size:14px;" onclick="submitAnketaVote('${akce.id}', this)">
+        ${uzHlasoval ? '🔄 Změnit můj hlas' : '🗳️ Odeslat hlas'}
+      </button>
+    `;
+  }
+
+  let resultsHtml = '';
+  if ((uzHlasoval || jePoUzaverce || canEdit) && muzeVidetVysledky) {
+    resultsHtml = `
+      <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border);">
+        <div style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:8px; display:flex; justify-content:space-between;">
+          <span>${jePoUzaverce ? 'Konečné výsledky' : 'Průběžné výsledky'}</span>
+          <span>Celkem hlasů: ${celkemHlasujicich}</span>
+        </div>
+        ${cfg.moznosti.map(m => {
+          const count = counts[m] || 0;
+          const pct = celkemHlasujicich > 0 ? Math.round((count / celkemHlasujicich) * 100) : 0;
+          const isMyPick = myChoices.includes(m);
+          const voters = votersByOption[m] || [];
+          return `
+            <div style="margin-bottom:10px;">
+              <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:${isMyPick ? '700' : '500'}; margin-bottom:3px;">
+                <span>${escapeHtml(m)} ${isMyPick ? '⭐' : ''}</span>
+                <span>${count} (${pct} %)</span>
+              </div>
+              <div style="height:8px; background:var(--surface); border-radius:4px; overflow:hidden; border:1px solid var(--border);">
+                <div style="height:100%; width:${pct}%; background:#6366f1; border-radius:4px;"></div>
+              </div>
+              ${(canEdit && voters.length > 0) ? `
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                  Hlasovali: ${escapeHtml(voters.join(', '))}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } else if (uzHlasoval && !muzeVidetVysledky) {
+    resultsHtml = `
+      <div style="margin-top:14px; font-size:12.5px; color:var(--text-muted); background:var(--bg); padding:8px 10px; border-radius:6px; border:1px solid var(--border); text-align:center;">
+        ✓ Váš hlas byl úspěšně zaznamenán. Výsledky vyhodnotí vedení a po odsouhlasení je zveřejní.
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card" style="border-top: 4px solid #6366f1; margin-bottom:16px;">
+      <div class="card-top-bar" style="background:#6366f1; color:#ffffff;">
+        <span>📊 ANKETA</span>
+        <span>${akce.datum ? (jePoUzaverce ? 'Uzavřeno: ' : 'Uzávěrka: ') + formatDisplayDate(akce.datum) : ''}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-title-row">
+          <div class="card-title" style="flex:1;">${escapeHtml(akce.nazev)}</div>
+          ${editBtn}
+        </div>
+        ${parsed.mainNote ? `<p style="font-size:14px; color:var(--text-muted); margin: 6px 0 12px 0; line-height:1.4;">${escapeHtml(parsed.mainNote)}</p>` : ''}
+        ${optionsHtml}
+        ${resultsHtml}
+        ${publishBtn}
+      </div>
+    </div>
+  `;
+}
+
+function schvalitAZverejnitVysledky(akceId) {
+  if (!confirm("Chcete schválit a zveřejnit výsledky této ankety všem členům orchestru?")) return;
+
+  const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
+  if (!akce) return;
+
+  let novaPoznamka = akce.poznamka.replace(/VIDITELNOST:\s*VEDENI/i, 'VIDITELNOST: VSICHNI');
+  if (!novaPoznamka.includes('VIDITELNOST: VSICHNI')) {
+    novaPoznamka += '\nVIDITELNOST: VSICHNI';
+  }
+
+  const payload = Object.assign({}, akce, {
+    poznamka: novaPoznamka,
+    editorJmeno: getAktualniEditor()
+  });
+
+  runGoogleScript("saveAkce", payload).then(res => {
+    if (res.success) {
+      akce.poznamka = novaPoznamka;
+      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+      renderEvents();
+      alert("Výsledky byly úspěšně zveřejněny celému orchestru.");
+    } else {
+      alert("Chyba při zveřejňování výsledků: " + res.error);
+    }
+  });
+}
+
+function submitAnketaVote(anketaId, btn) {
+  const inputs = document.querySelectorAll(`.anketa-input-${anketaId}:checked`);
+  const selected = [];
+  inputs.forEach(i => selected.push(i.value));
+
+  if (selected.length === 0) {
+    alert("Vyberte prosím alespoň jednu možnost.");
+    return;
+  }
+
+  const origText = btn.innerText;
+  btn.innerText = "Ukládám hlas...";
+  btn.disabled = true;
+
+  const payload = {
+    anketaId: anketaId,
+    jmeno: user.name,
+    sekce: user.section || "",
+    volby: selected
+  };
+
+  runGoogleScript("saveHlasAnkety", payload).then(res => {
+    btn.disabled = false;
+    btn.innerText = origText;
+    if (res.success) {
+      if (!appData.anketyHlasy) appData.anketyHlasy = [];
+      const existIdx = appData.anketyHlasy.findIndex(h => String(h.anketaId) === String(anketaId) && h.jmeno === user.name);
+      const voteObj = {
+        anketaId: anketaId,
+        jmeno: user.name,
+        sekce: user.section || "",
+        volby: selected.join(" | "),
+        datumCas: new Date().toLocaleString('cs-CZ')
+      };
+      if (existIdx !== -1) {
+        appData.anketyHlasy[existIdx] = voteObj;
+      } else {
+        appData.anketyHlasy.push(voteObj);
+      }
+      localStorage.setItem("bolech_data_cache", JSON.stringify(appData));
+      renderEvents();
+    } else {
+      alert("Chyba při ukládání hlasu: " + res.error);
+    }
+  });
+}
+
+function addAnketaOptionRow() {
+  const cont = document.getElementById('anketa_options_container');
+  if (!cont) return;
+  const count = cont.querySelectorAll('.anketa-opt-row').length + 1;
+  const div = document.createElement('div');
+  div.className = 'anketa-opt-row';
+  div.style.cssText = 'display:flex; gap:6px; align-items:center;';
+  div.innerHTML = `
+    <input type="text" class="modal-input anketa-opt-input" placeholder="Možnost ${count}" value="" style="margin:0; height:34px;">
+    <button type="button" class="btn" style="background:transparent; color:#ef4444; border:1px solid #ef4444; width:34px; height:34px; padding:0;" onclick="this.parentElement.remove()">✕</button>
+  `;
+  cont.appendChild(div);
 }

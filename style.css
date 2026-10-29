@@ -1420,3 +1420,19 @@ body.card-flipped-active .card:not(.card-flip-container) {
     color: #000000 !important;
   }
 }
+
+/* =========================================================================
+   ANKETY: STYLY PRO KARTY A VOLBY
+   ========================================================================= */
+.anketa-choice-label {
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.anketa-choice-label:hover {
+  border-color: #6366f1 !important;
+}
+
+.anketa-choice-label.selected {
+  border-color: #6366f1 !important;
+  background: rgba(99, 102, 241, 0.08) !important;
+}
