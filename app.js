@@ -2349,41 +2349,6 @@ function openAkceForm(param = null, isReadOnly = false) {
             <option value="Anketa" ${akce?.typ==='Anketa'?'selected':''}>📊 Anketa</option>
           </select>
 
-          <!-- PARAMETRY ANKETY -->
-          <div id="row_anketa_nastaveni" style="display:${akce?.typ==='Anketa'?'block':'none'}; background:rgba(99,102,241,0.06); border:1px solid #6366f1; border-radius:8px; padding:12px; margin-top:10px; margin-bottom:14px;">
-            <h4 style="margin:0 0 10px 0; color:#4f46e5; font-size:14px; display:flex; align-items:center; gap:6px;">
-              <span>📊</span> Parametry ankety
-            </h4>
-            
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
-              <div>
-                <label style="font-size:12px; font-weight:700;">Typ volby:</label>
-                <select id="f_anketa_typ_volby" class="modal-input" style="height:36px; margin-top:4px;">
-                  <option value="jedna" ${parsed.anketaCfg?.typVolby==='jedna'?'selected':''}>Jedna možnost (Radio)</option>
-                  <option value="vice" ${parsed.anketaCfg?.typVolby==='vice'?'selected':''}>Více možností (Checkbox)</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:12px; font-weight:700;">Viditelnost výsledků:</label>
-                <select id="f_anketa_viditelnost" class="modal-input" style="height:36px; margin-top:4px;">
-                  <option value="vsichni" ${parsed.anketaCfg?.viditelnost==='vsichni'?'selected':''}>Všichni hlasující</option>
-                  <option value="vedeni" ${parsed.anketaCfg?.viditelnost==='vedeni'?'selected':''}>Pouze vedení / editoři</option>
-                </select>
-              </div>
-            </div>
-
-            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Možnosti odpovědí:</label>
-            <div id="anketa_options_container" style="display:flex; flex-direction:column; gap:6px;">
-              ${(parsed.anketaCfg?.moznosti && parsed.anketaCfg.moznosti.length > 0 ? parsed.anketaCfg.moznosti : ['', '']).map((opt, i) => `
-                <div class="anketa-opt-row" style="display:flex; gap:6px; align-items:center;">
-                  <input type="text" class="modal-input anketa-opt-input" placeholder="Možnost ${i+1}" value="${escapeHtml(opt)}" style="margin:0; height:34px;">
-                  <button type="button" class="btn" style="background:transparent; color:#ef4444; border:1px solid #ef4444; width:34px; height:34px; padding:0;" onclick="this.parentElement.remove()">✕</button>
-                </div>
-              `).join('')}
-            </div>
-            <button type="button" class="btn" style="background:transparent; color:var(--primary); border:1px dashed var(--primary); width:100%; margin-top:8px; padding:6px; font-size:12px; font-weight:700;" onclick="addAnketaOptionRow()">+ Přidat možnost odpovědi</button>
-          </div>
-
           <!-- VÝBĚR CÍLOVÉ SKUPINY PRO INFORMACE -->
           <div id="row_cilovaSkupina" style="display:none; margin-bottom:14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
             <label style="font-weight:700; display:block; margin-bottom:6px; font-size:13px; color:var(--text);">Komu je informace určena:</label>
@@ -2468,9 +2433,44 @@ function openAkceForm(param = null, isReadOnly = false) {
             ` : ''}
           </div>
           <textarea id="f_poznamka" class="modal-input" style="min-height:90px; resize:vertical;" placeholder="Zde můžete psát i formátovat (**tučně**, *kurzíva*, odkazy...)" ${roAttr}>${escapeHtml(parsed.mainNote)}</textarea>
+          
+          <!-- PARAMETRY ANKETY -->
+          <div id="row_anketa_nastaveni" style="display:${akce?.typ==='Anketa'?'block':'none'}; background:rgba(99,102,241,0.06); border:1px solid #6366f1; border-radius:8px; padding:12px; margin-top:10px; margin-bottom:14px;">
+            <h4 style="margin:0 0 10px 0; color:#4f46e5; font-size:14px; display:flex; align-items:center; gap:6px;">
+              <span>📊</span> Parametry ankety
+            </h4>
+            
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Typ volby:</label>
+                <select id="f_anketa_typ_volby" class="modal-input" style="width:100%; min-height:40px; padding:8px 10px; font-size:13.5px; line-height:1.3;">
+                  <option value="jedna" ${parsed.anketaCfg?.typVolby==='jedna'?'selected':''}>Jedna možnost (Radio)</option>
+                  <option value="vice" ${parsed.anketaCfg?.typVolby==='vice'?'selected':''}>Více možností (Checkbox)</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Viditelnost výsledků:</label>
+                <select id="f_anketa_viditelnost" class="modal-input" style="width:100%; min-height:40px; padding:8px 10px; font-size:13.5px; line-height:1.3;">
+                  <option value="vsichni" ${parsed.anketaCfg?.viditelnost==='vsichni'?'selected':''}>Všichni hlasující</option>
+                  <option value="vedeni" ${parsed.anketaCfg?.viditelnost==='vedeni'?'selected':''}>Pouze vedení / editoři</option>
+                </select>
+              </div>
+            </div>
+
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Možnosti odpovědí:</label>
+            <div id="anketa_options_container" style="display:flex; flex-direction:column; gap:6px;">
+              ${(parsed.anketaCfg?.moznosti && parsed.anketaCfg.moznosti.length > 0 ? parsed.anketaCfg.moznosti : ['', '']).map((opt, i) => `
+                <div class="anketa-opt-row" style="display:flex; gap:6px; align-items:center;">
+                  <input type="text" class="modal-input anketa-opt-input" placeholder="Možnost ${i+1}" value="${escapeHtml(opt)}" style="margin:0; height:36px; padding:6px 10px; font-size:13.5px;">
+                  <button type="button" class="btn" style="background:transparent; color:#ef4444; border:1px solid #ef4444; width:36px; height:36px; padding:0; flex-shrink:0;" onclick="this.parentElement.remove()">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <button type="button" class="btn" style="background:transparent; color:var(--primary); border:1px dashed var(--primary); width:100%; margin-top:8px; padding:8px; font-size:13px; font-weight:700;" onclick="addAnketaOptionRow()">+ Přidat možnost odpovědi</button>
+          </div>
 
           <!-- BLOK: PROGRAM -->
-          <div style="margin-top: 16px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+          <div id="row_program" style="margin-top: 16px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
               <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; position: sticky; top: -12px; background: var(--bg); z-index: 5; padding: 6px 0; border-bottom: 1px solid var(--border);">
                   <span style="font-weight:bold; color:var(--text);">🎼 Program</span>
                   ${!isReadOnly ? `<button type="button" class="btn" style="padding:6px 12px; font-size:13px; background:var(--primary-light); width:auto;" onclick="addProgramRow()">➕ Přidat skladbu</button>` : ''}
@@ -2480,7 +2480,7 @@ function openAkceForm(param = null, isReadOnly = false) {
           </div>
 
           <!-- BLOK: HARMONOGRAM -->
-          <div style="margin-top: 16px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+          <div id="row_harmonogram" style="margin-top: 16px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
               <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
                   <span style="font-weight:bold; color:var(--text);">⏱️ Časový plán</span>
                   ${!isReadOnly ? `<button type="button" class="btn" style="padding:6px 12px; font-size:13px; background:var(--primary-light); width:auto;" onclick="addScheduleRow()">➕ Přidat čas</button>` : ''}
@@ -2608,27 +2608,46 @@ function toggleAkceFields() {
   const jeOznameni = typ.includes('Oznámení') || typ.includes('Informace');
   const jeZkouska = typ.includes('zkouška') || typ.includes('Zkouška');
   
+  // Parametry ankety
   const rowAnketa = document.getElementById('row_anketa_nastaveni');
   if (rowAnketa) rowAnketa.style.display = jeAnketa ? 'block' : 'none';
 
+  // Cílová skupina
   const rowCil = document.getElementById('row_cilovaSkupina');
   if (rowCil) rowCil.style.display = (jeOznameni || jeAnketa) ? 'block' : 'none';
 
+  // Popisek data
   const dateLabel = document.getElementById('lbl_datum_akce');
   if (dateLabel) {
     dateLabel.innerText = jeAnketa ? 'Datum uzávěrky ankety:' : (jeOznameni ? 'Datum zveřejnění:' : 'Datum akce:');
   }
 
+  // Dirigent a hlavní časy
   const rowDirigent = document.getElementById('row_dirigent');
   if (rowDirigent) rowDirigent.style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
 
   const rowCasyHlavni = document.getElementById('row_casy_hlavni');
   if (rowCasyHlavni) rowCasyHlavni.style.display = (jeOznameni || jeAnketa) ? 'none' : 'flex';
 
-  document.getElementById('row_misto').style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
-  document.getElementById('row_casy').style.display = (jeZkouska || jeOznameni || jeAnketa) ? 'none' : 'flex';
-  document.getElementById('row_obleceni').style.display = (typ === 'Koncert') ? 'flex' : 'none';
-  document.getElementById('col_generalka').style.display = (typ === 'Koncert') ? 'block' : 'none';
+  const rowMisto = document.getElementById('row_misto');
+  if (rowMisto) rowMisto.style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
+
+  const rowCasy = document.getElementById('row_casy');
+  if (rowCasy) rowCasy.style.display = (jeZkouska || jeOznameni || jeAnketa) ? 'none' : 'flex';
+
+  const rowObleceni = document.getElementById('row_obleceni');
+  if (rowObleceni) rowObleceni.style.display = (typ === 'Koncert') ? 'flex' : 'none';
+
+  const colGeneralka = document.getElementById('col_generalka');
+  if (colGeneralka) colGeneralka.style.display = (typ === 'Koncert') ? 'block' : 'none';
+
+  // PROGRAM: Skrýt při Informaci i Anketě
+  const rowProgram = document.getElementById('row_program');
+  if (rowProgram) rowProgram.style.display = (jeOznameni || jeAnketa) ? 'none' : 'block';
+
+  // HARMONOGRAM: Skrýt při Anketě (u Informace zůstává dostupný)
+  const rowHarmonogram = document.getElementById('row_harmonogram');
+  if (rowHarmonogram) rowHarmonogram.style.display = jeAnketa ? 'none' : 'block';
 }
 
 function submitAkceForm(e, akceId) {
@@ -2662,7 +2681,8 @@ function submitAkceForm(e, akceId) {
       progLines.push(`${num}|${author}|${piece}`);
     }
   }
-  if (progLines.length > 0) {
+  // Program se připojí pouze pokud typ NENÍ Informace ani Anketa
+  if (!jeOznameni && typ !== 'Anketa' && progLines.length > 0) {
     finalPoznamka += `\n\n===PROGRAM===\n` + progLines.join('\n');
   }
 
@@ -2676,7 +2696,8 @@ function submitAkceForm(e, akceId) {
       schedLines.push(`${t}|${d}`);
     }
   }
-  if (schedLines.length > 0) {
+  // Harmonogram se připojí pouze pokud typ NENÍ Anketa
+  if (typ !== 'Anketa' && schedLines.length > 0) {
     finalPoznamka += `\n\n===HARMONOGRAM===\n` + schedLines.join('\n');
   }
 
