@@ -37,8 +37,8 @@ const PARTITURA_SECTIONS = [
 
 // Široké rozvržení pódia (viewBox 660 x 375)
 const ORCHESTRA_LAYOUT_CFG = {
-  "1. Housle": { type: "strings", centerX: 100, yStart: 320, defaultCap: 10 },
-  "2. Housle": { type: "strings", centerX: 250, yStart: 320, defaultCap: 10 },
+  "1. Housle": { type: "strings", centerX: 100, yStart: 320, defaultCap: 12 },
+  "2. Housle": { type: "strings", centerX: 250, yStart: 320, defaultCap: 12 },
   "Violy":      { type: "strings", centerX: 410, yStart: 320, defaultCap: 8 },
   "Violoncella":{ type: "strings", centerX: 560, yStart: 320, defaultCap: 8 },
 
@@ -52,7 +52,7 @@ const ORCHESTRA_LAYOUT_CFG = {
   "Klávesy":               { type: "woodwinds", defaultCap: 2 },
   "Kytary":                { type: "woodwinds", defaultCap: 0 },
 
-  "Lesní rohy":     { type: "brass", y: 78, defaultCap: 4 },
+  "Lesní rohy":     { type: "brass", y: 78, defaultCap: 5 },
   "Trubky":          { type: "brass", y: 78, defaultCap: 4 },
   "Trombóny a Tuba":{ type: "brass", y: 78, defaultCap: 4 },
   "Bicí nástroje":   { type: "percussion", y: 32, centerX: 330, spacing: 38, defaultCap: 4 }
@@ -1095,6 +1095,16 @@ function generateAkceHtml(akce, canEdit) {
           <div class="card-body" style="padding-bottom: 0;">
             <div class="card-title-row">
               <div class="card-title" style="flex:1;">${escapeHtml(akce.nazev)}</div>
+              <button type="button" class="card-cal-icon-btn" onclick="event.preventDefault(); event.stopPropagation(); exportSingleEventIcs('${escapeHtml(akce.id)}');" title="Přidat tuto akci do kalendáře v mobilu (.ics)">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                  <line x1="12" y1="14" x2="12" y2="18"></line>
+                  <line x1="10" y1="16" x2="14" y2="16"></line>
+                </svg>
+              </button>
               ${editBtn}
             </div>
 
@@ -2162,7 +2172,7 @@ function refreshStagePreviewFromForm() {
 
   const akceId = modalSelect.value;
   const km = document.getElementById("orch_modal_km")?.value || "";
-  
+
   const limits = {};
   document.querySelectorAll(".sec-limit-input").forEach(sel => {
     limits[sel.dataset.sec] = parseInt(sel.value, 10);
@@ -4389,4 +4399,296 @@ async function manualSyncFromTable() {
     console.warn("Chyba při ruční synchronizaci:", err);
     updateSyncStatusUI("error", "Data z paměti (offline)");
   }
+}
+
+// =========================================================================
+// KALENDÁŘ: GENERÁTOR .ICS SOUBORŮ & TISKOVÝ VÝSTUP
+// =========================================================================
+
+function generateIcsData(eventsList) {
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function formatIcsDateTime(dateStr, timeStr) {
+    if (!dateStr) return null;
+    const match = String(dateStr).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+    if (!match) return null;
+    const y = parseInt(match[3], 10);
+    const m = parseInt(match[2], 10);
+    const d = parseInt(match[1], 10);
+
+    const cleanTime = formatDisplayTime(timeStr);
+    const timeMatch = cleanTime.match(/(\d{1,2}):(\d{2})/);
+    if (timeMatch) {
+      const hh = parseInt(timeMatch[1], 10);
+      const mm = parseInt(timeMatch[2], 10);
+      return `${y}${pad(m)}${pad(d)}T${pad(hh)}${pad(mm)}00`;
+    }
+    return `${y}${pad(m)}${pad(d)}`; // Celodenní
+  }
+
+  function escapeIcsText(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r?\n/g, '\\n');
+  }
+
+  let ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//TSO Bolech//Portal PWA//CS',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:TSO Bolech – Kalendář akcí',
+    'X-WR-TIMEZONE:Europe/Prague'
+  ];
+
+  const nowIso = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  eventsList.forEach(a => {
+    const dtStart = formatIcsDateTime(a.datum, a.casOd);
+    if (!dtStart) return;
+
+    let dtEnd = formatIcsDateTime(a.datum, a.casDo);
+    const isAllDay = !dtStart.includes('T');
+
+    if (!dtEnd) {
+      if (isAllDay) {
+        const match = String(a.datum).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+        const nextD = new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10) + 1);
+        dtEnd = `${nextD.getFullYear()}${pad(nextD.getMonth() + 1)}${pad(nextD.getDate())}`;
+      } else {
+        const timeMatch = formatDisplayTime(a.casOd).match(/(\d{1,2}):(\d{2})/);
+        const match = String(a.datum).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
+        const dObj = new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10), parseInt(timeMatch[1], 10) + 2, parseInt(timeMatch[2], 10) + 30);
+        dtEnd = `${dObj.getFullYear()}${pad(dObj.getMonth() + 1)}${pad(dObj.getDate())}T${pad(dObj.getHours())}${pad(dObj.getMinutes())}00`;
+      }
+    }
+
+    const summary = `TSO Bolech: ${a.typ || 'Akce'} – ${a.nazev || ''}`;
+    let descLines = [];
+    if (a.dirigent) descLines.push(`Dirigent: ${a.dirigent}`);
+    if (a.casSrazu) descLines.push(`Sraz: ${formatDisplayTime(a.casSrazu)}`);
+    if (a.zacatekGeneralky) descLines.push(`Generálka: ${formatDisplayTime(a.zacatekGeneralky)}`);
+    if (a.damy) descLines.push(`Dámy: ${a.damy}`);
+    if (a.pani) descLines.push(`Páni: ${a.pani}`);
+    if (a.poznamka) {
+      const cleanNote = a.poznamka.replace(/={2,}[\s\S]*/g, '').trim();
+      if (cleanNote) descLines.push(`Poznámka: ${cleanNote}`);
+    }
+
+    ics.push('BEGIN:VEVENT');
+    ics.push(`UID:bolech-${a.id}-${String(a.datum).replace(/\D/g, '')}@tsobolech.cz`);
+    ics.push(`DTSTAMP:${nowIso}`);
+    if (isAllDay) {
+      ics.push(`DTSTART;VALUE=DATE:${dtStart}`);
+      ics.push(`DTEND;VALUE=DATE:${dtEnd}`);
+    } else {
+      ics.push(`DTSTART:${dtStart}`);
+      ics.push(`DTEND:${dtEnd}`);
+    }
+    ics.push(`SUMMARY:${escapeIcsText(summary)}`);
+    if (a.misto) ics.push(`LOCATION:${escapeIcsText(a.misto)}`);
+    if (descLines.length > 0) ics.push(`DESCRIPTION:${escapeIcsText(descLines.join('\n'))}`);
+    
+    // Připomínka v kalendáři 2 hodiny předem
+    ics.push('BEGIN:VALARM');
+    ics.push('TRIGGER:-PT2H');
+    ics.push('ACTION:DISPLAY');
+    ics.push('DESCRIPTION:Připomínka akce TSO Bolech');
+    ics.push('END:VALARM');
+
+    ics.push('END:VEVENT');
+  });
+
+  ics.push('END:VCALENDAR');
+  return ics.join('\r\n');
+}
+
+function downloadIcsFile(filename, icsContent) {
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 300);
+}
+
+// Export jedné konkrétní akce
+function exportSingleEventIcs(akceId) {
+  const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
+  if (!akce) return;
+
+  const icsData = generateIcsData([akce]);
+  const safeName = (akce.nazev || 'akce').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+  downloadIcsFile(`tso-bolech-${safeName}.ics`, icsData);
+}
+
+// Dialog hromadného exportu kalendáře
+function openCalendarExportModal() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTs = today.getTime();
+
+  const nadchazejici = (appData.akce || [])
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => parseDate(a.datum) >= todayTs)
+    .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
+
+  const userSec = user?.section || "";
+
+  const modalHtml = `
+    <div id="calExportModal" class="modal-overlay" style="padding:10px;" onclick="if(event.target===this) this.remove()">
+      <div class="modal-box" style="max-width:440px; width:100%; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:18px; color:var(--primary); display:flex; align-items:center; gap:6px;">
+            <span>📅</span> Přidat do kalendáře
+          </h3>
+          <button type="button" style="background:transparent; border:none; font-size:20px; color:var(--text-muted); cursor:pointer;" onclick="document.getElementById('calExportModal').remove()">✕</button>
+        </div>
+
+        <p style="font-size:13.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;">
+          Stáhněte si harmonogram zkoušek a koncertů do svého kalendáře v mobilu (iPhone, Android) nebo v počítači (Google Kalendář, Outlook, Apple iCal).
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button class="btn" style="background:var(--primary); color:#ffffff; padding:10px 12px; font-size:13.5px; font-weight:700; text-align:left; display:flex; align-items:center; justify-content:space-between;" onclick="downloadAllEventsIcs(false)">
+            <span>🌐 Všechny nadcházející akce (${nadchazejici.length})</span>
+            <span>⬇️</span>
+          </button>
+
+          ${userSec ? `
+            <button class="btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:10px 12px; font-size:13.5px; font-weight:700; text-align:left; display:flex; align-items:center; justify-content:space-between;" onclick="downloadAllEventsIcs(true)">
+              <span>🎻 Pouze akce pro mou sekci (${userSec})</span>
+              <span>⬇️</span>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function downloadAllEventsIcs(jenMojeSekce = false) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTs = today.getTime();
+
+  let akce = (appData.akce || [])
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => parseDate(a.datum) >= todayTs)
+    .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
+
+  if (jenMojeSekce && user?.section) {
+    akce = akce.filter(a => canUserSeeAkce(a));
+  }
+
+  if (akce.length === 0) {
+    alert("Nebyly nalezeny žádné nadcházející akce k exportu.");
+    return;
+  }
+
+  const icsData = generateIcsData(akce);
+  downloadIcsFile(`tso-bolech-harmonogram.ics`, icsData);
+  const m = document.getElementById('calExportModal');
+  if (m) m.remove();
+}
+
+// Dialog a tiskový náhled
+function openPrintCalendarModal() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTs = today.getTime();
+
+  const akceList = (appData.akce || [])
+    .filter(a => !a.typ.includes("Oznámení") && !a.typ.includes("Informace"))
+    .filter(a => parseDate(a.datum) >= todayTs)
+    .sort((a, b) => parseDate(a.datum) - parseDate(b.datum));
+
+  const rowsHtml = akceList.map(a => {
+    const srazText = a.casSrazu ? `<br><small style="color:#475569;">⏰ Sraz: ${formatDisplayTime(a.casSrazu)}</small>` : '';
+    const genText = a.zacatekGeneralky ? `<br><small style="color:#475569;">🎼 Gen.: ${formatDisplayTime(a.zacatekGeneralky)}</small>` : '';
+    const casText = a.casOd ? `${formatDisplayTime(a.casOd)}${a.casDo ? '–' + formatDisplayTime(a.casDo) : ''}` : 'Celý den';
+    const odevText = (a.damy || a.pani) ? `<small style="display:block; margin-top:2px; color:#475569;">👗 ${escapeHtml(a.damy || '–')} | 🤵 ${escapeHtml(a.pani || '–')}</small>` : '';
+
+    return `
+      <tr>
+        <td style="font-weight:700; white-space:nowrap; vertical-align:top; padding:6px 8px;">${formatDisplayDate(a.datum)}</td>
+        <td style="white-space:nowrap; vertical-align:top; padding:6px 8px;">${casText}${srazText}${genText}</td>
+        <td style="vertical-align:top; padding:6px 8px;">
+          <strong>${escapeHtml(a.typ)}</strong>: ${escapeHtml(a.nazev)}
+          ${a.dirigent ? `<br><small style="color:#475569;">Dirigent: ${escapeHtml(a.dirigent)}</small>` : ''}
+        </td>
+        <td style="vertical-align:top; padding:6px 8px;">${escapeHtml(a.misto || '–')}</td>
+        <td style="vertical-align:top; padding:6px 8px;">${odevText}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const modalHtml = `
+    <div id="printCalendarModal" class="modal-overlay" style="padding:10px;" onclick="if(event.target===this) this.remove()">
+      <div class="modal-box" style="max-width:850px; width:100%; max-height:90vh; overflow-y:auto; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+          <div>
+            <h3 style="margin:0; font-size:18px; color:var(--primary);">🖨️ Tiskový kalendář akcí</h3>
+            <span style="font-size:12px; color:var(--text-muted);">Přehled optimalizovaný pro tisk a nástěnku</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn" style="background:var(--success); color:#ffffff; padding:6px 14px; font-weight:700; font-size:13px;" onclick="triggerPrintCalendar()">
+              🖨️ Vytisknout
+            </button>
+            <button type="button" style="background:transparent; border:none; font-size:20px; color:var(--text-muted); cursor:pointer;" onclick="document.getElementById('printCalendarModal').remove()">✕</button>
+          </div>
+        </div>
+
+        <div id="printableContent" style="background:#ffffff; color:#000000; padding:12px; border-radius:6px; border:1px solid #cbd5e1;">
+          <div style="text-align:center; margin-bottom:14px; border-bottom:2px solid #000; padding-bottom:8px;">
+            <h2 style="margin:0; font-size:18px; text-transform:uppercase; letter-spacing:0.5px;">Táborský symfonický orchestr Bolech</h2>
+            <div style="font-size:13px; font-weight:700; margin-top:2px;">Plán zkoušek a koncertů</div>
+            <div style="font-size:11px; color:#475569; margin-top:2px;">Vygenerováno: ${new Date().toLocaleDateString('cs-CZ')}</div>
+          </div>
+
+          <table class="print-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="background:#f1f5f9; border-bottom:1px solid #000;">
+                <th style="padding:6px; text-align:left; width:105px;">Datum</th>
+                <th style="padding:6px; text-align:left; width:95px;">Čas</th>
+                <th style="padding:6px; text-align:left;">Akce & Program</th>
+                <th style="padding:6px; text-align:left; width:130px;">Místo</th>
+                <th style="padding:6px; text-align:left; width:140px;">Oděv / Poznámka</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function triggerPrintCalendar() {
+  const printArea = document.getElementById('printableContent');
+  if (!printArea) return;
+
+  let printDiv = document.getElementById('printCalendarArea');
+  if (!printDiv) {
+    printDiv = document.createElement('div');
+    printDiv.id = 'printCalendarArea';
+    document.body.appendChild(printDiv);
+  }
+  printDiv.innerHTML = printArea.innerHTML;
+
+  window.print();
 }

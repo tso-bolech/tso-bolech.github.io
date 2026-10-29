@@ -1286,3 +1286,137 @@ body.card-flipped-active .card:not(.card-flip-container) {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* =========================================================================
+   SKUPINA NÁSTROJŮ V LIŠTĚ & TLAČÍTKO KALENDÁŘE NA KARTĚ
+   ========================================================================= */
+.sync-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sync-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sync-tool-btn:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text, #0f172a);
+}
+
+.card-cal-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.card-cal-icon-btn:hover {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* =========================================================================
+   ČISTÝ TISKOVÝ VÝSTUP BEZ KARET A ROZHRANÍ APLIKACE
+   ========================================================================= */
+/* Mimo tisk je tiskový arch neviditelný */
+#printCalendarArea {
+  display: none;
+}
+
+@media print {
+  /* 1. Skryjeme kompletně veškerý obsah aplikace (všechny karty akcí, hlavičku, navigaci) i otevřená okna */
+  #mainApp,
+  .modal-overlay,
+  .activity-modal-overlay,
+  #loginScreen,
+  header,
+  nav,
+  .container {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 2. Zobrazíme VÝHRADNĚ samotný tiskový arch s tabulkou od prvního řádku stránky */
+  #printCalendarArea {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+  }
+
+  .print-table th, .print-table td {
+    border: 1px solid #475569 !important;
+    padding: 6px 8px;
+    font-size: 9.5pt;
+    text-align: left;
+    vertical-align: top;
+    color: #000000 !important;
+  }
+
+  .print-table th {
+    background-color: #f1f5f9 !important;
+    font-weight: bold;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-table tr {
+    page-break-inside: avoid;
+  }
+}
+
+/* Náhled v modálu na obrazovce */
+.print-table th,
+.print-table td {
+  vertical-align: top !important;
+  text-align: left;
+}
+
+/* Výsledný tisk */
+@media print {
+  .print-table th,
+  .print-table td {
+    vertical-align: top !important;
+    border: 1px solid #475569 !important;
+    padding: 6px 8px;
+    font-size: 9.5pt;
+    text-align: left;
+    color: #000000 !important;
+  }
+}
