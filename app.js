@@ -3476,6 +3476,13 @@ function switchTab(t, b) {
 
   const bar = document.getElementById('floatingMailBar');
   if (bar) bar.style.display = (t === 'admin-noty' && window.vybraneNotyKEmailu.length > 0) ? 'flex' : 'none';
+
+  // -------------------------------------------------------------
+  // POSUN NA ZAČÁTEK STRÁNKY PŘI PŘEPNUTÍ ZÁLOŽKY
+  // -------------------------------------------------------------
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 }
 
 window.stromSlozek = []; 
