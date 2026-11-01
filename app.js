@@ -3396,20 +3396,35 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
     noty.forEach(nota => {
       const fileMatch = String(nota.odkaz || '').match(/[-\w]{25,}/);
       const fileId = fileMatch ? fileMatch[0] : '';
-      const downloadUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view` : nota.odkaz;
+
+      // 1. Přímé stažení souboru pro většinu muzikantů
+      const directDownloadUrl = fileId 
+        ? `https://drive.google.com/uc?export=download&id=${fileId}` 
+        : nota.odkaz;
+
+      // 2. Bezpečný webový prohlížeč pro ty, kterým stávkuje aplikace Disk
+      const webViewerUrl = fileId 
+        ? `https://docs.google.com/viewer?embedded=false&url=${encodeURIComponent(`https://drive.google.com/uc?id=${fileId}&export=download`)}` 
+        : nota.odkaz;
+
       html += `
         <div class="nota-card">
           <div class="nota-info">
             <h4>${escapeHtml(nota.skladba)}</h4>
             <span>${escapeHtml(nota.sekce)}</span>
           </div>
-          <a href="${downloadUrl}" target="_blank" class="nota-down-btn" title="Stáhnout">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-          </a>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <a href="${webViewerUrl}" target="_blank" class="btn-nota-mail" title="Prohlédnout na webu" style="text-decoration:none; font-size:16px;">
+              👁️
+            </a>
+            <a href="${directDownloadUrl}" target="_blank" class="nota-down-btn" title="Stáhnout přímo">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </a>
+          </div>
         </div>`;
     });
   }
