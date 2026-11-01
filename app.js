@@ -3394,7 +3394,9 @@ function vykresliNoty(dataNoty, nastrojUzivatele, jeDirigent = false) {
       </div>`;
       
     noty.forEach(nota => {
-      let downloadUrl = nota.odkaz.replace(/.*\/d\/([a-zA-Z0-9_-]+).*/, 'https://drive.google.com/uc?export=download&id=$1');
+      const fileMatch = String(nota.odkaz || '').match(/[-\w]{25,}/);
+      const fileId = fileMatch ? fileMatch[0] : '';
+      const downloadUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view` : nota.odkaz;
       html += `
         <div class="nota-card">
           <div class="nota-info">
