@@ -1304,10 +1304,12 @@ function toggleStageChip(prefix, type) {
   
   if (prefix === "manage") {
     refreshStagePreviewFromForm();
+  } else if (prefix === "view" && window.currentViewStageAkceId) {
+    bindOrchestraSvgData("view", window.currentViewStageAkceId);
   }
 }
 
-function getOrchestraSvgHtml(prefix = "stage") {
+function getOrchestraSvgHtml(prefix = "stage", showFilters = false) {
   return `
   <style>
     /* PŘÍMÉ BAREVNÉ STYLY PRO DLAŽDICE NA PÓDIU */
@@ -1411,7 +1413,7 @@ function getOrchestraSvgHtml(prefix = "stage") {
     <div class="stage-header-info" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 2px; min-height:26px;">
       <span class="stage-count-badge" id="${prefix}-total-count" style="font-size:12px; font-weight:700;">0 na pódiu</span>
 
-      ${prefix === "manage" ? `
+      ${(prefix === "manage" || showFilters) ? `
         <div style="display:flex; gap:6px; align-items:center;">
           <button type="button" id="${prefix}_btn_nepotvrzeni" class="stage-chip-btn" onclick="toggleStageChip('${prefix}', 'nepotvrzeni')" title="Zobrazit/skrýt čekající hráče">
             ⏳ Čekající
@@ -1785,11 +1787,19 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   }
 }
 
+window.currentViewStageAkceId = null;
+
 function openStageModalForAkce(akceId) {
+  window.currentViewStageAkceId = akceId;
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
+  
+  // Ověření: Admin, Vedení nebo Dirigent
+  const canSeeExtended = (typeof hasEditRights === 'function' && hasEditRights(user?.role)) || 
+                         (typeof isUserConductor === 'function' && isUserConductor(user));
+
   const html = `
     <div id="viewStageModal" class="modal-overlay" style="padding: 4px;" onclick="if(event.target===this) document.getElementById('viewStageModal').remove()">
-      <div class="modal-box" style="max-width: 820px; width: 100%; padding: 8px 6px;">
+      <div class="modal-box" style="max-width: 820px; width: 100%; max-height: 94vh; overflow-y: auto; padding: 8px 6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px; padding: 0 4px;">
           <div>
             <h3 style="margin:0; font-size:1.15rem; color:var(--primary);">${escapeHtml(akce ? akce.nazev : "Obsazení orchestru")}</h3>
@@ -1798,12 +1808,24 @@ function openStageModalForAkce(akceId) {
           <button type="button" style="background:transparent; border:none; font-size:22px; color:var(--text-muted); cursor:pointer; padding:4px 8px;" onclick="document.getElementById('viewStageModal').remove()">✕</button>
         </div>
         
-        ${getOrchestraSvgHtml("view")}
+        ${getOrchestraSvgHtml("view", canSeeExtended)}
+
+        ${canSeeExtended ? `
+          <details id="details_omluvenky_view" style="margin: 8px 2px 4px 2px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 10px;">
+            <summary style="cursor:pointer; font-weight:800; font-size:0.85rem; color:var(--danger); display:flex; justify-content:space-between; align-items:center;">
+              <span id="view_omluvenky_summary_title">📋 Omluvenky (0)</span>
+            </summary>
+            <div id="view_omluvenky_container" style="margin-top:8px;"></div>
+          </details>
+        ` : ''}
       </div>
     </div>
   `;
   document.body.insertAdjacentHTML('beforeend', html);
   bindOrchestraSvgData("view", akceId);
+  if (canSeeExtended) {
+    renderOmluvenkyList(akceId, "view");
+  }
 }
 
 function openOrchestrModal() {
@@ -1933,9 +1955,11 @@ function openOrchestrModal() {
   onOrchModalAkceChange();
 }
 
-function renderOmluvenkyList(akceId) {
-  const container = document.getElementById("omluvenky_container");
-  const titleEl = document.getElementById("omluvenky_summary_title");
+function renderOmluvenkyList(akceId, prefix = "") {
+  const containerId = prefix ? `${prefix}_omluvenky_container` : "omluvenky_container";
+  const titleId = prefix ? `${prefix}_omluvenky_summary_title` : "omluvenky_summary_title";
+  const container = document.getElementById(containerId);
+  const titleEl = document.getElementById(titleId);
   if (!container) return;
 
   const omluveni = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId) && u.stav === "Ne");
