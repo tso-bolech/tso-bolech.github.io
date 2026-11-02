@@ -1471,6 +1471,11 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   const akce = (appData.akce || []).find(a => String(a.id) === String(akceId));
   const datumAkce = akce ? akce.datum : "";
   const ucastAkce = (appData.ucast || []).filter(u => String(u.akceId) === String(akceId));
+
+  // Detekce dělených zkoušek pro filtrování sekcí na pódiu
+  const akceTyp = String(akce ? akce.typ : "").trim();
+  const jeZkouskaSmyccu = akceTyp === "Zkouška smyčců";
+  const jeZkouskaDechu = akceTyp === "Zkouška dechů";
   
   const savedCfg = (appData.orchestraConfig && appData.orchestraConfig[akceId]) || 
                    JSON.parse(localStorage.getItem(`bolech_orch_${akceId}`) || "{}");
@@ -1509,6 +1514,17 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
   const attendingBySec = {};
 
   Object.keys(ORCHESTRA_LAYOUT_CFG).forEach(sec => {
+    // 1. Zkouška smyčců -> ignorovat dechy, bicí i ostatní
+    if (jeZkouskaSmyccu && !["1. Housle", "2. Housle", "Violy", "Violoncella", "Kontrabasy", "Baskytara"].includes(sec)) {
+      attendingBySec[sec] = [];
+      return;
+    }
+    // 2. Zkouška dechů -> ignorovat smyčcovou sekci
+    if (jeZkouskaDechu && ["1. Housle", "2. Housle", "Violy", "Violoncella", "Kontrabasy", "Baskytara"].includes(sec)) {
+      attendingBySec[sec] = [];
+      return;
+    }
+
     const cfg = ORCHESTRA_LAYOUT_CFG[sec];
     const capacity = limits[sec] !== undefined ? parseInt(limits[sec], 10) : cfg.defaultCap;
     if (capacity <= 0) {
@@ -1607,7 +1623,35 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", x);
     label.setAttribute("y", y);
-    label.textContent = isDir ? "DIR" : getPlayerDisplayLabel(p.celeJmeno, isKm);
+
+    if (isDir) {
+      const parts = String(p.celeJmeno || "").trim().split(/\s+/);
+      const initials = (parts.length > 1)
+        ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+        : parts[0].substring(0, 2).toUpperCase();
+
+      const dirColor = (stav === 'Ne') ? '#dc2626' : '#d97706';
+
+      label.innerHTML = `
+        <tspan x="${x}" dy="-4" style="font-size:8.5px; font-weight:800; fill:${dirColor} !important;">DIR</tspan>
+        <tspan x="${x}" dy="11" style="font-size:10.5px; font-weight:800; fill:${dirColor} !important;">${initials}</tspan>
+      `;
+    } else if (isKm) {
+      const parts = String(p.celeJmeno || "").trim().split(/\s+/);
+      const initials = (parts.length > 1)
+        ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+        : parts[0].substring(0, 2).toUpperCase();
+
+      const kmColor = (stav === 'Ne') ? '#dc2626' : '#d97706';
+      const nameColor = (stav === 'Ne') ? '#dc2626' : (stav === 'Ceka' ? '#d97706' : 'var(--text)');
+
+      label.innerHTML = `
+        <tspan x="${x}" dy="-4" style="font-size:8.5px; font-weight:800; fill:${kmColor} !important;">KM</tspan>
+        <tspan x="${x}" dy="11" style="font-size:10.5px; font-weight:700; fill:${nameColor} !important;">${initials}</tspan>
+      `;
+    } else {
+      label.textContent = getPlayerDisplayLabel(p.celeJmeno, isKm);
+    }
 
     if (isDir) {
       polygon.style.setProperty("fill", "rgba(245, 158, 11, 0.25)", "important");
@@ -1659,7 +1703,8 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
       statusColor = "var(--danger)";
     }
 
-    spot.onclick = () => {
+    spot.onclick = (e) => {
+      if (e) e.stopPropagation();
       document.querySelectorAll(`#${prefix}-svg .hex-spot`).forEach(el => el.classList.remove("is-selected"));
       spot.classList.add("is-selected");
       showPlayerDetailBox(prefix, playerLabel, statusText, statusColor);
@@ -1687,92 +1732,121 @@ function bindOrchestraSvgData(prefix, akceId, cfgKM = null, cfgLimits = {}, cfgR
     }
   }
 
-  ["1. Housle", "2. Housle", "Violy", "Violoncella"].forEach(sec => {
-    const list = attendingBySec[sec] || [];
-    const cfg = ORCHESTRA_LAYOUT_CFG[sec];
-    list.forEach((p, idx) => {
-      const perRow = 3;
-      const row = Math.floor(idx / perRow);
-      const col = idx % perRow;
-      const rowOffsetX = (row % 2 === 1) ? 17 : 0;
-      const colPitch = 34;
-      const rowPitch = 29;
+  if (!jeZkouskaDechu) {
+    ["1. Housle", "2. Housle", "Violy", "Violoncella"].forEach(sec => {
+      const list = attendingBySec[sec] || [];
+      const cfg = ORCHESTRA_LAYOUT_CFG[sec];
+      list.forEach((p, idx) => {
+        const perRow = 3;
+        const row = Math.floor(idx / perRow);
+        const col = idx % perRow;
+        const colPitch = 36.5;
+        const rowPitch = 31.5;
+        const rowOffsetX = (row % 2 === 1) ? 18 : 0;
 
-      const x = (cfg.centerX - ((perRow - 1) * colPitch) / 2) + (col * colPitch) + rowOffsetX;
-      const y = cfg.yStart - (row * rowPitch);
-      const isKm = (sec === "1. Housle" && p.celeJmeno === kmName);
-      renderHexSpot(x, y, p, isKm, sec);
+        const x = (cfg.centerX - ((perRow - 1) * colPitch) / 2) + (col * colPitch) + rowOffsetX;
+        const y = cfg.yStart - (row * rowPitch);
+        const isKm = (sec === "1. Housle" && p.celeJmeno === kmName);
+        renderHexSpot(x, y, p, isKm, sec);
+      });
     });
-  });
-
-  const cbList = attendingBySec["Kontrabasy"] || [];
-  const bassList = attendingBySec["Baskytara"] || [];
-  const hasBass = bassList.length > 0;
-  const cbCenter = hasBass ? 275 : 330;
-
-  renderLabel(cbCenter, 196, "Kontrabasy");
-  cbList.forEach((p, idx) => {
-    const offset = (idx - (cbList.length - 1) / 2) * 38;
-    renderHexSpot(cbCenter + offset, 218, p, false, "Kontrabasy");
-  });
-
-  if (hasBass) {
-    const bassX = Math.max(cbCenter + (cbList.length * 20) + 38, 415);
-    renderLabel(bassX, 196, "Baskytara");
-    renderHexSpot(bassX, 218, bassList[0], false, "Baskytara");
   }
 
-  const baseWoodwinds = [
-    { sec: "Flétny", label: "Flétny" },
-    { sec: "Hoboje", label: "Hoboje" },
-    { sec: "Klarinety / Saxofony", label: "Klarinety" },
-    { sec: "Fagoty", label: "Fagoty" },
-    { sec: "Klávesy", label: "Klávesy" }
-  ];
+  if (!jeZkouskaDechu) {
+    const cbList = attendingBySec["Kontrabasy"] || [];
+    const bassList = attendingBySec["Baskytara"] || [];
+    const hasBass = bassList.length > 0;
+    const cbCenter = hasBass ? 275 : 330;
 
-  const hasGuitar = attendingBySec["Kytary"] && attendingBySec["Kytary"].length > 0;
-  if (hasGuitar) {
-    baseWoodwinds.push({ sec: "Kytary", label: "Kytara" });
+    renderLabel(cbCenter, 196, "Kontrabasy");
+    cbList.forEach((p, idx) => {
+      const offset = (idx - (cbList.length - 1) / 2) * 38;
+      renderHexSpot(cbCenter + offset, 218, p, false, "Kontrabasy");
+    });
+
+    if (hasBass) {
+      const bassX = Math.max(cbCenter + (cbList.length * 20) + 38, 415);
+      renderLabel(bassX, 196, "Baskytara");
+      renderHexSpot(bassX, 218, bassList[0], false, "Baskytara");
+    }
   }
 
-  const totalCols = baseWoodwinds.length;
-  const blockWidth = Math.min(620 / totalCols, 115);
-  const startX = 330 - ((totalCols - 1) * blockWidth) / 2;
+  if (!jeZkouskaSmyccu) {
+    const baseWoodwinds = [
+      { sec: "Flétny", label: "Flétny" },
+      { sec: "Hoboje", label: "Hoboje" },
+      { sec: "Klarinety / Saxofony", label: "Klarinety" },
+      { sec: "Fagoty", label: "Fagoty" },
+      { sec: "Klávesy", label: "Klávesy" }
+    ];
 
-  baseWoodwinds.forEach((item, bIdx) => {
-    const bCenter = startX + (bIdx * blockWidth);
-    renderLabel(bCenter, 120, item.label);
+    const hasGuitar = attendingBySec["Kytary"] && attendingBySec["Kytary"].length > 0;
+    if (hasGuitar) {
+      baseWoodwinds.push({ sec: "Kytary", label: "Kytara" });
+    }
 
-    const list = attendingBySec[item.sec] || [];
-    list.forEach((p, idx) => {
-      const offset = (idx - (list.length - 1) / 2) * 36;
-      renderHexSpot(bCenter + offset, 144, p, false, item.sec);
+    const totalCols = baseWoodwinds.length;
+    const blockWidth = Math.min(620 / totalCols, 115);
+    const startX = 330 - ((totalCols - 1) * blockWidth) / 2;
+
+    baseWoodwinds.forEach((item, bIdx) => {
+      const bCenter = startX + (bIdx * blockWidth);
+      renderLabel(bCenter, 120, item.label);
+
+      const list = attendingBySec[item.sec] || [];
+      list.forEach((p, idx) => {
+        const offset = (idx - (list.length - 1) / 2) * 36;
+        renderHexSpot(bCenter + offset, 144, p, false, item.sec);
+      });
     });
-  });
+  }
 
-  const hornList = attendingBySec["Lesní rohy"] || [];
-  hornList.forEach((p, idx) => {
-    const offset = (idx - (hornList.length - 1) / 2) * 36;
-    renderHexSpot(120 + offset, 88, p, false, "Lesní rohy");
-  });
+  if (!jeZkouskaSmyccu) {
+    const hornList = attendingBySec["Lesní rohy"] || [];
+    hornList.forEach((p, idx) => {
+      const offset = (idx - (hornList.length - 1) / 2) * 36;
+      renderHexSpot(120 + offset, 88, p, false, "Lesní rohy");
+    });
 
-  const trpList = attendingBySec["Trubky"] || [];
-  trpList.forEach((p, idx) => {
-    const offset = (idx - (trpList.length - 1) / 2) * 36;
-    renderHexSpot(330 + offset, 88, p, false, "Trubky");
-  });
+    const trpList = attendingBySec["Trubky"] || [];
+    trpList.forEach((p, idx) => {
+      const offset = (idx - (trpList.length - 1) / 2) * 36;
+      renderHexSpot(330 + offset, 88, p, false, "Trubky");
+    });
 
-  const trbList = attendingBySec["Trombóny a Tuba"] || [];
-  trbList.forEach((p, idx) => {
-    const offset = (idx - (trbList.length - 1) / 2) * 36;
-    renderHexSpot(540 + offset, 88, p, false, "Trombóny / Tuba");
-  });
+    const trbList = attendingBySec["Trombóny a Tuba"] || [];
+    trbList.forEach((p, idx) => {
+      const offset = (idx - (trbList.length - 1) / 2) * 36;
+      renderHexSpot(540 + offset, 88, p, false, "Trombóny / Tuba");
+    });
 
-  const biciList = attendingBySec["Bicí nástroje"] || [];
-  biciList.forEach((p, idx) => {
-    const offset = (idx - (biciList.length - 1) / 2) * 38;
-    renderHexSpot(330 + offset, 38, p, false, "Bicí nástroje");
-  });
+    const biciList = attendingBySec["Bicí nástroje"] || [];
+    biciList.forEach((p, idx) => {
+      const offset = (idx - (biciList.length - 1) / 2) * 38;
+      renderHexSpot(330 + offset, 38, p, false, "Bicí nástroje");
+    });
+  }
+
+  // Vynesení koncertního mistra do popředí (zabrání překrytí zlatého rámečku sousedními židlemi)
+  const kmEl = dynamicGroup.querySelector('.is-km');
+  if (kmEl) {
+    dynamicGroup.appendChild(kmEl);
+  }
+
+  const svgEl = document.getElementById(`${prefix}-svg`);
+  if (svgEl) {
+    const textEls = Array.from(svgEl.querySelectorAll("text.sec-label"));
+    textEls.forEach(t => {
+      const txt = t.textContent.trim();
+      if (jeZkouskaSmyccu && ["Bicí nástroje", "Lesní rohy", "Trubky", "Trombóny / Tuba"].includes(txt)) {
+        t.style.display = "none";
+      } else if (jeZkouskaDechu && ["1. Housle", "2. Housle", "Violy", "Violoncella"].includes(txt)) {
+        t.style.display = "none";
+      } else {
+        t.style.display = "";
+      }
+    });
+  }
 
   const countBadge = document.getElementById(`${prefix}-total-count`);
   if (countBadge) {
